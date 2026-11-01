@@ -11,13 +11,14 @@ import '../models/installed_app.dart';
 class RunningAppInstance {
   final String appId;
   final int port;
-  final HttpServer server;
+  /// Null when the UI is served by an external companion (e.g. Vite `npm run dev`).
+  final HttpServer? server;
   final String launchUrl;
 
   const RunningAppInstance({
     required this.appId,
     required this.port,
-    required this.server,
+    this.server,
     required this.launchUrl,
   });
 }
@@ -25,12 +26,15 @@ class RunningAppInstance {
 class LocalServerService {
   final Map<String, RunningAppInstance> _runningInstances = {};
   final Map<String, int> _assignedPorts = {};
-  final Map<String, Process> _companionProcesses = {};
+  final Map<String, List<Process>> _companionProcesses = {};
   final Map<String, List<String>> _companionLogs = {};
 
   bool isAppRunning(String appId) => _runningInstances.containsKey(appId);
 
-  bool isCompanionRunning(String appId) => _companionProcesses.containsKey(appId);
+  bool isCompanionRunning(String appId) {
+    final procs = _companionProcesses[appId];
+    return procs != null && procs.isNotEmpty;
+  }
 
   List<String> getCompanionLogs(String appId) =>
       List.unmodifiable(_companionLogs[appId] ?? const []);
@@ -50,8 +54,163 @@ class LocalServerService {
     }
   }
 
-  /// Starts a companion backend process (Python script or Node.js)
-  Future<Process> startCompanionBackend(
+  /// GETs an API URL and returns true for any HTTP response (2xx–4xx).
+  Future<bool> checkApiHealth(String url) async {
+    final result = await testApi(url);
+    return result.ok;
+  }
+
+  /// Runs an HTTP request against a companion API and returns status + body preview.
+  Future<ApiTestResult> testApi(
+    String url, {
+    String method = 'GET',
+  }) async {
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 3);
+      final uri = Uri.parse(url);
+      final request = await client.openUrl(method.toUpperCase(), uri);
+      request.headers.set('Accept', 'application/json, text/plain, */*');
+      final response = await request.close().timeout(const Duration(seconds: 5));
+      final body = await response.transform(utf8.decoder).join();
+      final preview = body.length > 4000 ? '${body.substring(0, 4000)}\n…' : body;
+      final code = response.statusCode;
+      return ApiTestResult(
+        url: url,
+        method: method.toUpperCase(),
+        statusCode: code,
+        bodyPreview: preview,
+        ok: code >= 200 && code < 500,
+      );
+    } catch (e) {
+      return ApiTestResult(
+        url: url,
+        method: method.toUpperCase(),
+        bodyPreview: '',
+        ok: false,
+        error: e.toString(),
+      );
+    } finally {
+      client?.close(force: true);
+    }
+  }
+
+  /// Ensures ASP.NET CORS policies allow both localhost and 127.0.0.1 Vite origins.
+  Future<void> ensureDotnetLocalCors(String projectDir, int vitePort) async {
+    final program = File(p.join(projectDir, 'Program.cs'));
+    if (!await program.exists()) return;
+    try {
+      var content = await program.readAsString();
+      final localOrigin = 'http://localhost:$vitePort';
+      final loopbackOrigin = 'http://127.0.0.1:$vitePort';
+      if (content.contains(localOrigin) && content.contains(loopbackOrigin)) {
+        return;
+      }
+      if (!content.contains('WithOrigins')) return;
+
+      final updated = content.replaceFirstMapped(
+        RegExp(r'WithOrigins\s*\(([\s\S]*?)\)'),
+        (match) {
+          final inside = match.group(1) ?? '';
+          final origins = <String>{};
+          for (final m in RegExp(r'"([^"]+)"').allMatches(inside)) {
+            origins.add(m.group(1)!);
+          }
+          origins.add(localOrigin);
+          origins.add(loopbackOrigin);
+          final listed = origins.map((o) => '                "$o"').join(',\n');
+          return 'WithOrigins(\n$listed\n            )';
+        },
+      );
+      if (updated != content) {
+        await program.writeAsString(updated);
+      }
+    } catch (_) {}
+  }
+
+  Map<String, String> _augmentedEnv() {
+    final currentPath = Platform.environment['PATH'] ?? '';
+    final env = Map<String, String>.from(Platform.environment);
+    env['PATH'] = '$currentPath:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin';
+    return env;
+  }
+
+  List<String> _macosCandidates(List<String> preferred, List<String> fallback) {
+    final out = <String>[];
+    if (Platform.isMacOS) {
+      for (final bin in preferred) {
+        if (File(bin).existsSync()) out.add(bin);
+      }
+    }
+    out.addAll(fallback);
+    return out;
+  }
+
+  Future<Process> _startProcess({
+    required String appId,
+    required String label,
+    required List<String> candidates,
+    required List<String> args,
+    required String workingDir,
+    Map<String, String>? extraEnv,
+  }) async {
+    final env = _augmentedEnv();
+    if (extraEnv != null) env.addAll(extraEnv);
+
+    Process? process;
+    Object? lastError;
+    for (final bin in candidates) {
+      try {
+        process = await Process.start(
+          bin,
+          args,
+          workingDirectory: workingDir,
+          environment: env,
+        );
+        break;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (process == null) {
+      throw ProcessException(
+        candidates.first,
+        args,
+        'Could not start $label: $lastError',
+      );
+    }
+
+    final procs = _companionProcesses.putIfAbsent(appId, () => []);
+    procs.add(process);
+    final captured = process;
+
+    captured.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+      final logs = _companionLogs[appId] ??= [];
+      if (logs.length > 200) logs.removeAt(0);
+      logs.add('[$label:stdout] $line');
+    });
+    captured.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+      final logs = _companionLogs[appId] ??= [];
+      if (logs.length > 200) logs.removeAt(0);
+      logs.add('[$label:stderr] $line');
+    });
+    captured.exitCode.then((code) {
+      final list = _companionProcesses[appId];
+      list?.remove(captured);
+      if (list != null && list.isEmpty) {
+        _companionProcesses.remove(appId);
+      }
+      final logs = _companionLogs[appId] ??= [];
+      logs.add('[system] $label exited with code $code');
+    });
+
+    return captured;
+  }
+
+  /// Starts companion backends (.NET, Python, Node, and/or Vite) for an app.
+  /// Starts only what is missing so a crashed Vite can be recreated while the API stays up.
+  Future<void> startCompanionBackend(
     InstalledApp app, {
     BackendRequirement? requirement,
   }) async {
@@ -60,123 +219,176 @@ class LocalServerService {
       throw StateError('App does not have any backend requirements.');
     }
 
-    if (_companionProcesses.containsKey(app.id)) {
-      return _companionProcesses[app.id]!;
-    }
+    _companionLogs[app.id] ??= [];
+    Process? primary =
+        _companionProcesses[app.id]?.isNotEmpty == true
+            ? _companionProcesses[app.id]!.first
+            : null;
 
-    String executable;
-    List<String> args;
-    String workingDir;
-    final candidateBinaries = <String>[];
+    if (req.requiresDotnet && req.dotnetProject != null) {
+      final projectPath = p.join(app.installedPath, req.dotnetProject!);
+      final projectFile = File(projectPath);
+      final workingDir = await projectFile.exists()
+          ? projectFile.parent.path
+          : (await Directory(projectPath).exists()
+              ? projectPath
+              : app.installedPath);
+      final projectArg = await projectFile.exists()
+          ? p.basename(projectFile.path)
+          : (workingDir == app.installedPath ? req.dotnetProject! : '.');
+
+      await ensureDotnetLocalCors(workingDir, req.viteDevPort ?? 5173);
+
+      final apiUp =
+          req.backendPort != null && await isPortListening(req.backendPort!);
+      if (!apiUp) {
+        primary = await _startProcess(
+          appId: app.id,
+          label: 'dotnet',
+          candidates: _macosCandidates(
+            ['/opt/homebrew/bin/dotnet', '/usr/local/share/dotnet/dotnet'],
+            ['dotnet'],
+          ),
+          args: ['run', '--project', projectArg, '--launch-profile', 'http'],
+          workingDir: workingDir,
+          extraEnv: {'ASPNETCORE_ENVIRONMENT': 'Development'},
+        );
+      }
+    }
 
     if (req.requiresPython && req.pythonScript != null) {
-      final scriptFile = File(p.join(app.installedPath, req.pythonScript!));
-      if (await scriptFile.exists()) {
-        workingDir = scriptFile.parent.path;
-        args = [p.basename(scriptFile.path)];
-      } else {
-        workingDir = app.installedPath;
-        args = [req.pythonScript!];
+      final pythonUp =
+          req.backendPort != null && await isPortListening(req.backendPort!);
+      if (!pythonUp) {
+        final scriptFile = File(p.join(app.installedPath, req.pythonScript!));
+        final workingDir =
+            await scriptFile.exists() ? scriptFile.parent.path : app.installedPath;
+        final args = [
+          await scriptFile.exists()
+              ? p.basename(scriptFile.path)
+              : req.pythonScript!,
+        ];
+        final proc = await _startProcess(
+          appId: app.id,
+          label: 'python',
+          candidates: _macosCandidates(
+            [
+              '/opt/homebrew/bin/python3',
+              '/usr/local/bin/python3',
+              '/Library/Developer/CommandLineTools/usr/bin/python3',
+              '/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/Current/bin/python3',
+            ],
+            ['python3', '/usr/bin/python3', 'python'],
+          ),
+          args: args,
+          workingDir: workingDir,
+        );
+        primary ??= proc;
       }
-
-      // Prioritize direct non-shim python binaries on macOS
-      if (Platform.isMacOS) {
-        for (final binPath in [
-          '/opt/homebrew/bin/python3',
-          '/usr/local/bin/python3',
-          '/Library/Developer/CommandLineTools/usr/bin/python3',
-          '/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/Current/bin/python3',
-        ]) {
-          if (File(binPath).existsSync()) {
-            candidateBinaries.add(binPath);
-          }
-        }
-      }
-      candidateBinaries.addAll(['python3', '/usr/bin/python3', 'python']);
-      executable = candidateBinaries.first;
-    } else if (req.requiresNode && req.nodeScript != null) {
-      final scriptFile = File(p.join(app.installedPath, req.nodeScript!));
-      if (await scriptFile.exists()) {
-        workingDir = scriptFile.parent.path;
-        args = [p.basename(scriptFile.path)];
-      } else {
-        workingDir = app.installedPath;
-        args = [req.nodeScript!];
-      }
-      if (Platform.isMacOS) {
-        for (final binPath in ['/opt/homebrew/bin/node', '/usr/local/bin/node']) {
-          if (File(binPath).existsSync()) {
-            candidateBinaries.add(binPath);
-          }
-        }
-      }
-      candidateBinaries.addAll(['node', '/usr/bin/node']);
-      executable = candidateBinaries.first;
-    } else {
-      throw UnsupportedError('No executable companion backend detected for ${app.name}');
     }
 
-    _companionLogs[app.id] = [];
+    if (req.requiresNode && req.nodeScript != null) {
+      final nodeUp =
+          req.backendPort != null && await isPortListening(req.backendPort!);
+      if (!nodeUp) {
+        final scriptFile = File(p.join(app.installedPath, req.nodeScript!));
+        final workingDir =
+            await scriptFile.exists() ? scriptFile.parent.path : app.installedPath;
+        final args = [
+          await scriptFile.exists() ? p.basename(scriptFile.path) : req.nodeScript!,
+        ];
+        final proc = await _startProcess(
+          appId: app.id,
+          label: 'node',
+          candidates: _macosCandidates(
+            ['/opt/homebrew/bin/node', '/usr/local/bin/node'],
+            ['node', '/usr/bin/node'],
+          ),
+          args: args,
+          workingDir: workingDir,
+        );
+        primary ??= proc;
+      }
+    }
 
-    // Ensure common PATH entries (e.g. /usr/local/bin, /opt/homebrew/bin) are included on macOS
-    final currentPath = Platform.environment['PATH'] ?? '';
-    final augmentedEnv = Map<String, String>.from(Platform.environment);
-    augmentedEnv['PATH'] = '$currentPath:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin';
-
-    Process process;
-    try {
-      process = await Process.start(
-        executable,
-        args,
-        workingDirectory: workingDir,
-        environment: augmentedEnv,
-      );
-    } catch (e) {
-      Process? fallbackProcess;
-      for (final bin in candidateBinaries.skip(1)) {
-        try {
-          fallbackProcess = await Process.start(
-            bin,
-            args,
-            workingDirectory: workingDir,
-            environment: augmentedEnv,
+    if (req.requiresViteDev && req.viteProjectDir != null) {
+      final vitePort = req.viteDevPort ?? 5173;
+      final viteUp = await isPortListening(vitePort);
+      if (!viteUp) {
+        final viteDir = req.viteProjectDir == '.' || req.viteProjectDir!.isEmpty
+            ? app.installedPath
+            : p.join(app.installedPath, req.viteProjectDir!);
+        // Prefer the real package entry. Copied `.bin/vite` shims break because
+        // directory sideload flattens symlinks and relative imports resolve wrong.
+        final viteCli =
+            File(p.join(viteDir, 'node_modules', 'vite', 'bin', 'vite.js'));
+        final Process proc;
+        if (await viteCli.exists()) {
+          proc = await _startProcess(
+            appId: app.id,
+            label: 'vite',
+            candidates: _macosCandidates(
+              ['/opt/homebrew/bin/node', '/usr/local/bin/node'],
+              ['node', '/usr/bin/node'],
+            ),
+            args: [
+              viteCli.path,
+              '--host',
+              '127.0.0.1',
+              '--port',
+              '$vitePort',
+            ],
+            workingDir: viteDir,
           );
-          break;
-        } catch (_) {}
-      }
-      if (fallbackProcess != null) {
-        process = fallbackProcess;
-      } else {
-        rethrow;
+        } else {
+          proc = await _startProcess(
+            appId: app.id,
+            label: 'vite',
+            candidates: _macosCandidates(
+              ['/opt/homebrew/bin/npm', '/usr/local/bin/npm'],
+              ['npm'],
+            ),
+            args: [
+              'run',
+              'dev',
+              '--',
+              '--host',
+              '127.0.0.1',
+              '--port',
+              '$vitePort',
+            ],
+            workingDir: viteDir,
+          );
+        }
+        primary ??= proc;
       }
     }
 
-    _companionProcesses[app.id] = process;
+    final startedSomething = primary != null || isCompanionRunning(app.id);
+    if (startedSomething) return;
 
-    process.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-      final logs = _companionLogs[app.id] ??= [];
-      if (logs.length > 200) logs.removeAt(0);
-      logs.add('[stdout] $line');
-    });
-
-    process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-      final logs = _companionLogs[app.id] ??= [];
-      if (logs.length > 200) logs.removeAt(0);
-      logs.add('[stderr] $line');
-    });
-
-    process.exitCode.then((code) {
-      _companionProcesses.remove(app.id);
-      final logs = _companionLogs[app.id] ??= [];
-      logs.add('[system] Backend process exited with code $code');
-    });
-
-    return process;
+    // Nothing new to spawn — succeed if required ports are already serving.
+    final ports = <int>{
+      if (req.backendPort != null) req.backendPort!,
+      if (req.viteDevPort != null) req.viteDevPort!,
+    };
+    if (ports.isEmpty) {
+      throw UnsupportedError(
+        'No executable companion backend detected for ${app.name}',
+      );
+    }
+    for (final port in ports) {
+      if (!await isPortListening(port)) {
+        throw StateError(
+          'Could not start companion services; port $port is not listening.',
+        );
+      }
+    }
   }
 
   Future<void> stopCompanionBackend(String appId) async {
-    final process = _companionProcesses.remove(appId);
-    if (process != null) {
+    final procs = _companionProcesses.remove(appId) ?? const <Process>[];
+    for (final process in procs) {
       process.kill();
     }
   }
@@ -199,10 +411,27 @@ class LocalServerService {
     return port;
   }
 
-  /// Starts an embedded loopback HTTP server with persistent port and SPA fallback
+  /// Starts an embedded loopback HTTP server, or attaches to a running Vite UI.
   Future<RunningAppInstance> startAppServer(InstalledApp app) async {
     if (_runningInstances.containsKey(app.id)) {
       return _runningInstances[app.id]!;
+    }
+
+    final req = app.backendRequirement;
+    if (req != null && req.requiresViteDev && req.viteDevPort != null) {
+      final vitePort = req.viteDevPort!;
+      if (await isPortListening(vitePort)) {
+        final instance = RunningAppInstance(
+          appId: app.id,
+          port: vitePort,
+          launchUrl: 'http://127.0.0.1:$vitePort/',
+        );
+        _runningInstances[app.id] = instance;
+        return instance;
+      }
+      throw StateError(
+        'Vite UI is not running on port $vitePort. Start the companion backend first.',
+      );
     }
 
     final targetDir = Directory(app.installedPath);
@@ -224,6 +453,10 @@ class LocalServerService {
       } else {
         await for (final entity in targetDir.list(recursive: true)) {
           if (entity is File && p.basename(entity.path).toLowerCase() == 'index.html') {
+            final relative = p.relative(entity.path, from: targetDir.path);
+            if (relative.contains('node_modules') || relative.contains('.history')) {
+              continue;
+            }
             resolvedIndexFile = entity;
             break;
           }
@@ -336,19 +569,23 @@ class LocalServerService {
 
   Future<void> stopAppServer(String appId) async {
     final instance = _runningInstances.remove(appId);
-    if (instance != null) {
-      await instance.server.close(force: true);
+    if (instance?.server != null) {
+      await instance!.server!.close(force: true);
     }
     await stopCompanionBackend(appId);
   }
 
   Future<void> stopAll() async {
     for (final instance in _runningInstances.values) {
-      await instance.server.close(force: true);
+      if (instance.server != null) {
+        await instance.server!.close(force: true);
+      }
     }
     _runningInstances.clear();
-    for (final process in _companionProcesses.values) {
-      process.kill();
+    for (final procs in _companionProcesses.values) {
+      for (final process in procs) {
+        process.kill();
+      }
     }
     _companionProcesses.clear();
   }
@@ -360,6 +597,9 @@ class LocalServerService {
         return 'application/wasm';
       case '.mjs':
       case '.js':
+      case '.ts':
+      case '.tsx':
+      case '.jsx':
         return 'text/javascript; charset=utf-8';
       case '.json':
         return 'application/json; charset=utf-8';

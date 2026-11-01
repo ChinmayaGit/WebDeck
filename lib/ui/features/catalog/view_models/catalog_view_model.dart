@@ -363,11 +363,21 @@ class CatalogViewModel extends ChangeNotifier {
 
   Future<bool> isPortListening(int port) => _repository.isPortListening(port);
 
+  Future<bool> checkApiHealth(String url) => _repository.checkApiHealth(url);
+
+  Future<ApiTestResult> testApi(String url, {String method = 'GET'}) =>
+      _repository.testApi(url, method: method);
+
   Future<BackendRequirement?> resolveBackendRequirement(InstalledApp app) async {
     final req = await _repository.resolveBackendRequirement(app);
-    if (req != null && app.backendRequirement == null) {
-      final index = _apps.indexWhere((a) => a.id == app.id);
-      if (index >= 0) {
+    final index = _apps.indexWhere((a) => a.id == app.id);
+    if (index >= 0) {
+      final current = _apps[index].backendRequirement;
+      final changed = (req == null && current != null) ||
+          (req != null &&
+              (current == null ||
+                  current.toJson().toString() != req.toJson().toString()));
+      if (changed) {
         _apps[index] = _apps[index].copyWith(backendRequirement: req);
         notifyListeners();
       }

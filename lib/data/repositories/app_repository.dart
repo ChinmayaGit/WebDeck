@@ -52,7 +52,12 @@ class AppRepository {
 
   Future<bool> isPortListening(int port) => _serverService.isPortListening(port);
 
-  Future<Process> startCompanionBackend(
+  Future<bool> checkApiHealth(String url) => _serverService.checkApiHealth(url);
+
+  Future<ApiTestResult> testApi(String url, {String method = 'GET'}) =>
+      _serverService.testApi(url, method: method);
+
+  Future<void> startCompanionBackend(
     InstalledApp app, {
     BackendRequirement? requirement,
   }) =>
@@ -61,20 +66,44 @@ class AppRepository {
   Future<void> stopCompanionBackend(String appId) =>
       _serverService.stopCompanionBackend(appId);
 
+  /// True when a previously saved backend path was a dependency false positive
+  /// (e.g. Vite's `node_modules/.../server.js`).
+  bool _isStaleBackendRequirement(BackendRequirement req) {
+    final scripts = [
+      req.pythonScript,
+      req.nodeScript,
+      req.dotnetProject,
+      req.viteProjectDir,
+      req.databasePath,
+    ];
+    for (final script in scripts) {
+      if (script != null &&
+          script != 'SQLite' &&
+          script != 'SQL Server' &&
+          script != '.' &&
+          _extractorService.isIgnoredBundlePath(script)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Checks if an app has or needs backend requirements detection
   Future<BackendRequirement?> resolveBackendRequirement(InstalledApp app) async {
-    if (app.backendRequirement != null) {
-      return app.backendRequirement;
+    final existing = app.backendRequirement;
+    if (existing != null &&
+        existing.hasRequirements &&
+        !_isStaleBackendRequirement(existing)) {
+      return existing;
     }
     final targetDir = Directory(app.installedPath);
     if (await targetDir.exists()) {
       final entities = await targetDir.list(recursive: true).toList();
       final req = await _extractorService.detectBackendRequirements(targetDir, entities);
-      if (req != null) {
-        final updated = app.copyWith(backendRequirement: req);
-        await _storageService.saveOrUpdateApp(updated);
-        return req;
-      }
+      // Persist cleared or corrected detection so stale node_modules hits don't stick.
+      final updated = app.copyWith(backendRequirement: req);
+      await _storageService.saveOrUpdateApp(updated);
+      return req;
     }
     return null;
   }

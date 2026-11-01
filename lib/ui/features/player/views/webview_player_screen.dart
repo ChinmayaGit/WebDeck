@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,8 +8,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
+import 'package:provider/provider.dart';
+
 import '../../../../data/models/installed_app.dart';
 import '../../../core/theme.dart';
+import '../../catalog/view_models/catalog_view_model.dart';
+import '../../catalog/views/backend_console_dialog.dart';
 
 class WebViewPlayerScreen extends StatefulWidget {
   final InstalledApp app;
@@ -85,9 +90,29 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
       );
 
       if (controller.platform is AndroidWebViewController) {
+        final androidController = controller.platform as AndroidWebViewController;
         AndroidWebViewController.enableDebugging(true);
-        (controller.platform as AndroidWebViewController)
-            .setMediaPlaybackRequiresUserGesture(false);
+        androidController.setMediaPlaybackRequiresUserGesture(false);
+        androidController.setOnShowFileSelector((FileSelectorParams params) async {
+          try {
+            final List<PlatformFile> files;
+            if (params.mode == FileSelectorMode.openMultiple) {
+              files = await FilePicker.pickFiles();
+            } else {
+              final single = await FilePicker.pickFile();
+              files = single != null ? [single] : [];
+            }
+            if (files.isNotEmpty) {
+              return files
+                  .where((f) => f.path != null)
+                  .map((f) => Uri.file(f.path!).toString())
+                  .toList();
+            }
+          } catch (e) {
+            debugPrint('Android file picker error: $e');
+          }
+          return [];
+        });
       }
 
       controller.loadRequest(Uri.parse(widget.launchUrl));
@@ -109,6 +134,20 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  void _openBackendConsole() {
+    final req = widget.app.backendRequirement;
+    if (req == null) return;
+    final viewModel = context.read<CatalogViewModel>();
+    showDialog(
+      context: context,
+      builder: (ctx) => BackendConsoleDialog(
+        app: widget.app,
+        requirement: req,
+        viewModel: viewModel,
+      ),
+    );
   }
 
   @override
@@ -198,6 +237,13 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
                           visualDensity: VisualDensity.compact,
                           onPressed: _openInExternalBrowser,
                         ),
+                        if (widget.app.backendRequirement?.hasRequirements == true)
+                          IconButton(
+                            icon: const Icon(Icons.dns_rounded, size: 16),
+                            tooltip: 'Backend Console (DB / Test API)',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: _openBackendConsole,
+                          ),
                         const SizedBox(width: 4),
                       ],
                       IconButton(

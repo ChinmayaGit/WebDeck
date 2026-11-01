@@ -309,9 +309,8 @@ print(f"Starting server on port {PORT}")
       expect(req.setupInstructions, contains('python3 serve.py'));
       expect(req.setupInstructions, contains('8765'));
 
-      // Check port probing
-      final isListening = await repository.isPortListening(8765);
-      // Port is not yet running
+      // Check port probing on an unused port
+      final isListening = await repository.isPortListening(59876);
       expect(isListening, isFalse);
 
       // Install and verify backendRequirement is saved on InstalledApp
@@ -341,6 +340,115 @@ print(f"Starting server on port {PORT}")
 
       await repository.stopCompanionBackend(app.id);
       expect(repository.isCompanionRunning(app.id), isFalse);
+    });
+
+    test('Ignores Vite node_modules server.js and prefers dist over public docs', () async {
+      final appDir = Directory('${tempDir.path}/mario_like_bundle');
+      await appDir.create(recursive: true);
+
+      final distIndex = File('${appDir.path}/web/dist/index.html');
+      await distIndex.parent.create(recursive: true);
+      await distIndex.writeAsString('<html><body>Mario game</body></html>');
+
+      final docsIndex = File('${appDir.path}/rea/website/public/index.html');
+      await docsIndex.parent.create(recursive: true);
+      await docsIndex.writeAsString(
+        '<html><body>Docs mention http://127.0.0.1:3000 and sqlite</body></html>',
+      );
+
+      final viteServer = File(
+        '${appDir.path}/web/node_modules/vite/dist/node/chunks/server.js',
+      );
+      await viteServer.parent.create(recursive: true);
+      await viteServer.writeAsString('export { createServer };');
+
+      final bundleInfo = await extractor.inspectDirectory(appDir);
+
+      expect(bundleInfo.webRootRelative, 'web/dist');
+      expect(bundleInfo.entryHtmlRelative, 'web/dist/index.html');
+      expect(bundleInfo.backendRequirement, isNull);
+    });
+
+    test('Detects .NET API, SQL Server hints, Vite UI, and API health URL like EMPManagement', () async {
+      final appDir = Directory('${tempDir.path}/emp_management');
+      await appDir.create(recursive: true);
+
+      final csproj = File('${appDir.path}/EmployeeApi/EmployeeApi.csproj');
+      await csproj.parent.create(recursive: true);
+      await csproj.writeAsString('''
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
+  </ItemGroup>
+</Project>
+''');
+
+      final launch = File('${appDir.path}/EmployeeApi/Properties/launchSettings.json');
+      await launch.parent.create(recursive: true);
+      await launch.writeAsString('''
+{
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5018",
+      "environmentVariables": { "ASPNETCORE_ENVIRONMENT": "Development" }
+    }
+  }
+}
+''');
+
+      final appsettings = File('${appDir.path}/EmployeeApi/appsettings.json');
+      await appsettings.writeAsString('''
+{
+  "ConnectionStrings": {
+    "Default": "Server=localhost,1433;Database=EmpDb;TrustServerCertificate=True;"
+  }
+}
+''');
+
+      final uiIndex = File('${appDir.path}/employee-ui/index.html');
+      await uiIndex.parent.create(recursive: true);
+      await uiIndex.writeAsString('''
+<!doctype html>
+<html><body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body></html>
+''');
+
+      final viteConfig = File('${appDir.path}/employee-ui/vite.config.ts');
+      await viteConfig.writeAsString("import { defineConfig } from 'vite'\nexport default defineConfig({})\n");
+
+      final appTsx = File('${appDir.path}/employee-ui/src/App.tsx');
+      await appTsx.parent.create(recursive: true);
+      await appTsx.writeAsString('''
+export default function App() {
+  fetch("http://localhost:5018/api/employees");
+  return null;
+}
+''');
+
+      final falseNode = File(
+        '${appDir.path}/employee-ui/node_modules/vite/dist/node/chunks/server.js',
+      );
+      await falseNode.parent.create(recursive: true);
+      await falseNode.writeAsString('export {}');
+
+      final bundleInfo = await extractor.inspectDirectory(appDir);
+      expect(bundleInfo.backendRequirement, isNotNull);
+      final req = bundleInfo.backendRequirement!;
+      expect(req.requiresDotnet, isTrue);
+      expect(req.dotnetProject, 'EmployeeApi/EmployeeApi.csproj');
+      expect(req.backendPort, 5018);
+      expect(req.apiCheckUrl, 'http://127.0.0.1:5018/api/employees');
+      expect(req.requiresViteDev, isTrue);
+      expect(req.viteProjectDir, 'employee-ui');
+      expect(req.viteDevPort, 5173);
+      expect(req.usesSqlServer, isTrue);
+      expect(req.requiresNode, isFalse);
+      expect(req.setupInstructions, contains('dotnet run'));
+      expect(req.setupInstructions, contains('npm run dev'));
     });
   });
 }

@@ -87,7 +87,7 @@ class InstalledApp {
     String? webRootRelative,
     String? entryHtml,
     String? framework,
-    BackendRequirement? backendRequirement,
+    Object? backendRequirement = _unset,
     DateTime? installedAt,
     int? sizeBytes,
   }) {
@@ -103,9 +103,13 @@ class InstalledApp {
       webRootRelative: webRootRelative ?? this.webRootRelative,
       entryHtml: entryHtml ?? this.entryHtml,
       framework: framework ?? this.framework,
-      backendRequirement: backendRequirement ?? this.backendRequirement,
+      backendRequirement: identical(backendRequirement, _unset)
+          ? this.backendRequirement
+          : backendRequirement as BackendRequirement?,
       installedAt: installedAt ?? this.installedAt,
       sizeBytes: sizeBytes ?? this.sizeBytes,
     );
   }
 }
+
+const Object _unset = Object();

@@ -3,12 +3,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../data/models/backend_requirement.dart';
 import '../../../../data/models/installed_app.dart';
 import '../../../core/theme.dart';
 import '../../player/views/webview_player_screen.dart';
 import '../view_models/catalog_view_model.dart';
 import 'app_card.dart';
 import 'install_dialog.dart';
+import 'backend_console_dialog.dart';
 import 'setup_requirement_dialog.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -25,17 +27,23 @@ class HomeScreen extends StatelessWidget {
   void _launchApp(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
     // Check if app has companion backend or database requirements
     final req = await viewModel.resolveBackendRequirement(app);
-    final effectiveApp = req != null && app.backendRequirement == null
+    final effectiveApp = req != null
         ? app.copyWith(backendRequirement: req)
         : app;
 
     if (req != null && req.hasRequirements) {
-      final port = req.backendPort;
-      var isPortActive = false;
-      if (port != null) {
-        isPortActive = await viewModel.isPortListening(port);
-      } else if (viewModel.isCompanionRunning(app.id)) {
-        isPortActive = true;
+      var isPortActive = await _areCompanionPortsReady(viewModel, app.id, req);
+
+      // Auto-create / start missing backends before opening the UI.
+      if (!isPortActive) {
+        try {
+          await viewModel.startCompanionBackend(effectiveApp, requirement: req);
+          for (var i = 0; i < 40; i++) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            isPortActive = await _areCompanionPortsReady(viewModel, app.id, req);
+            if (isPortActive) break;
+          }
+        } catch (_) {}
       }
 
       if (!isPortActive) {
@@ -55,6 +63,53 @@ class HomeScreen extends StatelessWidget {
 
     if (!context.mounted) return;
     _executeLaunch(context, viewModel, effectiveApp);
+  }
+
+  void _openBackendConsole(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
+    final req = await viewModel.resolveBackendRequirement(app);
+    if (req == null || !req.hasRequirements) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This app has no detected API / database backend.'),
+        ),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => BackendConsoleDialog(
+        app: app.copyWith(backendRequirement: req),
+        requirement: req,
+        viewModel: viewModel,
+      ),
+    );
+  }
+
+  Future<bool> _areCompanionPortsReady(
+    CatalogViewModel viewModel,
+    String appId,
+    BackendRequirement req,
+  ) async {
+    final ports = <int>{
+      if (req.backendPort != null) req.backendPort!,
+      if (req.viteDevPort != null) req.viteDevPort!,
+    };
+    if (ports.isEmpty) {
+      return viewModel.isCompanionRunning(appId);
+    }
+    for (final port in ports) {
+      if (!await viewModel.isPortListening(port)) return false;
+    }
+    if (req.apiCheckUrl != null) {
+      return viewModel.checkApiHealth(req.apiCheckUrl!);
+    }
+    return true;
   }
 
   void _executeLaunch(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
@@ -88,13 +143,7 @@ class HomeScreen extends StatelessWidget {
         : app;
 
     if (req != null && req.hasRequirements) {
-      final port = req.backendPort;
-      var isPortActive = false;
-      if (port != null) {
-        isPortActive = await viewModel.isPortListening(port);
-      } else if (viewModel.isCompanionRunning(app.id)) {
-        isPortActive = true;
-      }
+      final isPortActive = await _areCompanionPortsReady(viewModel, app.id, req);
 
       if (!isPortActive) {
         if (!context.mounted) return;
@@ -591,6 +640,7 @@ class HomeScreen extends StatelessWidget {
               onOpenBrowser: () => _openInExternalBrowser(context, viewModel, app),
               onUpdateIcon: () => _onUpdateIcon(context, viewModel, app),
               onCheckUpdate: () => _onCheckUpdate(context, viewModel, app),
+              onBackendConsole: () => _openBackendConsole(context, viewModel, app),
             );
           },
         );
@@ -666,13 +716,17 @@ class HomeScreen extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          app.backendRequirement!.requiresPython ? Icons.terminal : Icons.storage,
+                          app.backendRequirement!.requiresDotnet
+                              ? Icons.dns
+                              : (app.backendRequirement!.requiresPython
+                                  ? Icons.terminal
+                                  : Icons.storage),
                           size: 10,
                           color: const Color(0xFFD29922),
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          app.backendRequirement!.requiresPython ? 'Python' : 'DB',
+                          app.backendRequirement!.runtimeBadgeLabel,
                           style: const TextStyle(fontSize: 9, color: Color(0xFFD29922), fontWeight: FontWeight.w700),
                         ),
                       ],

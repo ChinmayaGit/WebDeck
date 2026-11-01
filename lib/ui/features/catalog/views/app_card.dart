@@ -13,6 +13,7 @@ class AppCard extends StatelessWidget {
   final VoidCallback onOpenBrowser;
   final VoidCallback onUpdateIcon;
   final VoidCallback onCheckUpdate;
+  final VoidCallback? onBackendConsole;
 
   const AppCard({
     super.key,
@@ -25,6 +26,7 @@ class AppCard extends StatelessWidget {
     required this.onOpenBrowser,
     required this.onUpdateIcon,
     required this.onCheckUpdate,
+    this.onBackendConsole,
   });
 
   String get _formattedSize {
@@ -197,15 +199,17 @@ class AppCard extends StatelessWidget {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      app.backendRequirement!.requiresPython
-                                          ? Icons.terminal
-                                          : Icons.storage,
+                                      app.backendRequirement!.requiresDotnet
+                                          ? Icons.dns
+                                          : (app.backendRequirement!.requiresPython
+                                              ? Icons.terminal
+                                              : Icons.storage),
                                       size: 10,
                                       color: const Color(0xFFD29922),
                                     ),
                                     const SizedBox(width: 3),
                                     Text(
-                                      app.backendRequirement!.requiresPython ? 'Python' : 'DB',
+                                      app.backendRequirement!.runtimeBadgeLabel,
                                       style: const TextStyle(
                                         fontSize: 9,
                                         color: Color(0xFFD29922),
@@ -235,6 +239,9 @@ class AppCard extends StatelessWidget {
                           break;
                         case 'check_update':
                           onCheckUpdate();
+                          break;
+                        case 'backend':
+                          onBackendConsole?.call();
                           break;
                         case 'browser':
                           onOpenBrowser();
@@ -268,6 +275,18 @@ class AppCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                      if (onBackendConsole != null &&
+                          app.backendRequirement?.hasRequirements == true)
+                        const PopupMenuItem(
+                          value: 'backend',
+                          child: Row(
+                            children: [
+                              Icon(Icons.dns_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Backend Console'),
+                            ],
+                          ),
+                        ),
                       const PopupMenuDivider(),
                       const PopupMenuItem(
                         value: 'browser',

@@ -1,0 +1,11 @@
+WebDeck Windows release must be built on a Windows machine (Flutter does not cross-compile Windows from macOS).
+
+  git clone <this-repo>
+  cd WebDeck
+  flutter pub get
+  flutter build windows --release
+
+Output:
+  build\windows\x64\runner\Release\
+
+Zip that Release folder as WebDeck-windows-x64.zip for distribution.

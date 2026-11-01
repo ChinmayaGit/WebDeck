@@ -6,6 +6,7 @@ import '../../../../data/models/backend_requirement.dart';
 import '../../../../data/models/installed_app.dart';
 import '../../../core/theme.dart';
 import '../view_models/catalog_view_model.dart';
+import 'backend_console_dialog.dart';
 
 class SetupRequirementDialog extends StatefulWidget {
   final InstalledApp app;
@@ -35,18 +36,47 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
   String get _terminalCommand {
     final req = widget.requirement;
     final path = widget.app.installedPath;
+    final parts = <String>[];
+
+    if (req.requiresDotnet && req.dotnetProject != null) {
+      final projectFile = File(p.join(path, req.dotnetProject!));
+      final workDir = projectFile.existsSync() ? projectFile.parent.path : path;
+      final projectArg =
+          projectFile.existsSync() ? p.basename(projectFile.path) : req.dotnetProject!;
+      parts.add('cd "$workDir" && dotnet run --project $projectArg --launch-profile http');
+    }
     if (req.requiresPython && req.pythonScript != null) {
       final scriptFile = File(p.join(path, req.pythonScript!));
-      final workDir = scriptFile.parent.path;
-      final scriptName = p.basename(scriptFile.path);
-      return 'cd "$workDir" && python3 $scriptName';
+      final workDir = scriptFile.existsSync() ? scriptFile.parent.path : path;
+      final scriptName =
+          scriptFile.existsSync() ? p.basename(scriptFile.path) : req.pythonScript!;
+      parts.add('cd "$workDir" && python3 $scriptName');
     } else if (req.requiresNode && req.nodeScript != null) {
       final scriptFile = File(p.join(path, req.nodeScript!));
-      final workDir = scriptFile.parent.path;
-      final scriptName = p.basename(scriptFile.path);
-      return 'cd "$workDir" && node $scriptName';
+      final workDir = scriptFile.existsSync() ? scriptFile.parent.path : path;
+      final scriptName =
+          scriptFile.existsSync() ? p.basename(scriptFile.path) : req.nodeScript!;
+      parts.add('cd "$workDir" && node $scriptName');
     }
-    return 'cd "$path"';
+    if (req.requiresViteDev && req.viteProjectDir != null) {
+      final viteDir = req.viteProjectDir == '.' || req.viteProjectDir!.isEmpty
+          ? path
+          : p.join(path, req.viteProjectDir!);
+      final viteCli = p.join(viteDir, 'node_modules', 'vite', 'bin', 'vite.js');
+      final port = req.viteDevPort ?? 5173;
+      if (File(viteCli).existsSync()) {
+        parts.add(
+          'cd "$viteDir" && node "$viteCli" --host 127.0.0.1 --port $port',
+        );
+      } else {
+        parts.add(
+          'cd "$viteDir" && npm run dev -- --host 127.0.0.1 --port $port',
+        );
+      }
+    }
+
+    if (parts.isEmpty) return 'cd "$path"';
+    return parts.join('\n');
   }
 
   void _copyCommand() {
@@ -65,7 +95,12 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
       final req = widget.requirement;
       final path = widget.app.installedPath;
       var openPath = path;
-      if (req.pythonScript != null) {
+      if (req.dotnetProject != null) {
+        final projectFile = File(p.join(path, req.dotnetProject!));
+        if (projectFile.existsSync()) {
+          openPath = projectFile.parent.path;
+        }
+      } else if (req.pythonScript != null) {
         final scriptFile = File(p.join(path, req.pythonScript!));
         if (scriptFile.existsSync()) {
           openPath = scriptFile.parent.path;
@@ -75,6 +110,10 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
         if (scriptFile.existsSync()) {
           openPath = scriptFile.parent.path;
         }
+      } else if (req.viteProjectDir != null) {
+        openPath = req.viteProjectDir == '.' || req.viteProjectDir!.isEmpty
+            ? path
+            : p.join(path, req.viteProjectDir!);
       }
       if (Platform.isMacOS) {
         Process.run('open', [openPath]);
@@ -86,10 +125,45 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
     } catch (_) {}
   }
 
+  Set<int> get _requiredPorts => {
+        if (widget.requirement.backendPort != null) widget.requirement.backendPort!,
+        if (widget.requirement.viteDevPort != null) widget.requirement.viteDevPort!,
+      };
+
+  Future<bool> _waitForPorts({required int attempts}) async {
+    final ports = _requiredPorts;
+    if (ports.isEmpty) return true;
+
+    for (var i = 0; i < attempts; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return false;
+      var allUp = true;
+      for (final port in ports) {
+        if (!await widget.viewModel.isPortListening(port)) {
+          allUp = false;
+          break;
+        }
+      }
+      if (allUp) return true;
+    }
+    return false;
+  }
+
+  Future<bool> _waitForApiCheck({required int attempts}) async {
+    final url = widget.requirement.apiCheckUrl;
+    if (url == null) return true;
+    for (var i = 0; i < attempts; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return false;
+      if (await widget.viewModel.checkApiHealth(url)) return true;
+    }
+    return false;
+  }
+
   Future<void> _startBackendAutomatically() async {
     setState(() {
       _isStarting = true;
-      _statusMessage = 'Launching backend process in background...';
+      _statusMessage = 'Launching companion server(s) in background...';
       _errorMessage = null;
       _processLogs = [];
     });
@@ -100,27 +174,41 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
         requirement: widget.requirement,
       );
 
-      final port = widget.requirement.backendPort;
-      if (port != null) {
+      final ports = _requiredPorts;
+      if (ports.isNotEmpty) {
         setState(() {
-          _statusMessage = 'Waiting for companion port $port to become active...';
+          _statusMessage =
+              'Waiting for ports ${ports.join(", ")} to become active...';
         });
 
-        var isListening = false;
-        // Poll for up to 5 seconds
-        for (var i = 0; i < 10; i++) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (!mounted) return;
-          isListening = await widget.viewModel.isPortListening(port);
-          if (isListening) break;
-        }
-
+        final isListening = await _waitForPorts(attempts: 40);
         if (!isListening) {
           final logs = widget.viewModel.getCompanionLogs(widget.app.id);
           setState(() {
             _isStarting = false;
             _statusMessage = null;
-            _errorMessage = 'Backend started but port $port is not yet responding. Check output logs below.';
+            _errorMessage =
+                'Backend started but port(s) ${ports.join(", ")} are not yet responding. Check output logs below.';
+            _processLogs = logs;
+            _showLogs = true;
+          });
+          return;
+        }
+      }
+
+      if (widget.requirement.apiCheckUrl != null) {
+        setState(() {
+          _statusMessage =
+              'Checking API ${widget.requirement.apiCheckUrl}...';
+        });
+        final apiOk = await _waitForApiCheck(attempts: 20);
+        if (!apiOk) {
+          final logs = widget.viewModel.getCompanionLogs(widget.app.id);
+          setState(() {
+            _isStarting = false;
+            _statusMessage = null;
+            _errorMessage =
+                'Ports are up but API check failed for ${widget.requirement.apiCheckUrl}. Check logs / SQL Server connection.';
             _processLogs = logs;
             _showLogs = true;
           });
@@ -137,7 +225,8 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
       setState(() {
         _isStarting = false;
         _statusMessage = null;
-        _errorMessage = 'Could not start backend: $e\nEnsure Python 3 is installed in your system PATH.';
+        _errorMessage =
+            'Could not start backend: $e\nEnsure .NET SDK, Node/npm, and/or Python 3 are installed.';
         _processLogs = logs;
         _showLogs = true;
       });
@@ -167,25 +256,22 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
         await Process.start('x-terminal-emulator', ['-e', 'bash -c "$cmd; exec bash"']);
       }
 
-      final port = widget.requirement.backendPort;
-      if (port != null) {
+      final ports = _requiredPorts;
+      if (ports.isNotEmpty) {
         setState(() {
-          _statusMessage = 'Waiting for port $port to become active...';
+          _statusMessage =
+              'Waiting for ports ${ports.join(", ")} to become active...';
         });
 
-        var isListening = false;
-        for (var i = 0; i < 20; i++) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (!mounted) return;
-          isListening = await widget.viewModel.isPortListening(port);
-          if (isListening) break;
-        }
-
+        final isListening = await _waitForPorts(attempts: 40);
         if (isListening) {
-          if (!mounted) return;
-          Navigator.of(context).pop();
-          widget.onProceedToLaunch();
-          return;
+          final apiOk = await _waitForApiCheck(attempts: 20);
+          if (apiOk) {
+            if (!mounted) return;
+            Navigator.of(context).pop();
+            widget.onProceedToLaunch();
+            return;
+          }
         }
       }
 
@@ -309,7 +395,8 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'This application requires a local companion script to serve data from disk or communicate with a local SQLite database (e.g. ${req.pythonScript ?? "backend server"}). WebDeck can start it for you or you can run it via terminal.',
+                        req.setupInstructions ??
+                            'This application needs a local companion server (.NET API, Python, Node, and/or Vite). WebDeck can start it for you or you can run the commands in a terminal.',
                         style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary, height: 1.4),
                       ),
                     ),
@@ -334,6 +421,14 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
                         ),
                         child: Column(
                           children: [
+                            if (req.requiresDotnet && req.dotnetProject != null)
+                              _buildDetailRow(
+                                icon: Icons.dns_rounded,
+                                label: '.NET Project',
+                                value: req.dotnetProject!,
+                                badge: '.NET',
+                                badgeColor: const Color(0xFF512BD4),
+                              ),
                             if (req.requiresPython && req.pythonScript != null)
                               _buildDetailRow(
                                 icon: Icons.terminal_rounded,
@@ -350,21 +445,48 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
                                 badge: 'Node.js',
                                 badgeColor: const Color(0xFF68A063),
                               ),
+                            if (req.requiresViteDev && req.viteProjectDir != null)
+                              _buildDetailRow(
+                                icon: Icons.flash_on_rounded,
+                                label: 'Vite UI',
+                                value: 'npm run dev (${req.viteProjectDir})',
+                                badge: 'Vite',
+                                badgeColor: const Color(0xFF646CFF),
+                              ),
                             if (req.hasDatabase)
                               _buildDetailRow(
                                 icon: Icons.storage_rounded,
                                 label: 'Database',
-                                value: req.databasePath ?? 'SQLite Disk DB',
-                                badge: 'SQLite',
-                                badgeColor: const Color(0xFF003B57),
+                                value: req.databasePath ??
+                                    (req.usesSqlServer ? 'SQL Server' : 'SQLite Disk DB'),
+                                badge: req.usesSqlServer ? 'SQL Server' : 'SQLite',
+                                badgeColor: req.usesSqlServer
+                                    ? const Color(0xFFCC2927)
+                                    : const Color(0xFF003B57),
                               ),
                             if (req.backendPort != null)
                               _buildDetailRow(
                                 icon: Icons.lan_outlined,
-                                label: 'Required Port',
+                                label: 'API Port',
                                 value: 'http://127.0.0.1:${req.backendPort}',
                                 badge: 'Inactive',
                                 badgeColor: WebDeckTheme.accentRed,
+                              ),
+                            if (req.viteDevPort != null)
+                              _buildDetailRow(
+                                icon: Icons.language_rounded,
+                                label: 'UI Port',
+                                value: 'http://127.0.0.1:${req.viteDevPort}',
+                                badge: 'Inactive',
+                                badgeColor: WebDeckTheme.accentRed,
+                              ),
+                            if (req.apiCheckUrl != null)
+                              _buildDetailRow(
+                                icon: Icons.health_and_safety_outlined,
+                                label: 'API Check',
+                                value: req.apiCheckUrl!,
+                                badge: 'Health',
+                                badgeColor: const Color(0xFF1F6FEB),
                               ),
                           ],
                         ),
@@ -519,6 +641,26 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
                         ),
                         icon: const Icon(Icons.folder_open, size: 15),
                         label: const Text('Open Folder', style: TextStyle(fontSize: 12)),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _isStarting
+                            ? null
+                            : () {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => BackendConsoleDialog(
+                                    app: widget.app,
+                                    requirement: widget.requirement,
+                                    viewModel: widget.viewModel,
+                                  ),
+                                );
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF512BD4),
+                          side: BorderSide(color: const Color(0xFF512BD4).withValues(alpha: 0.4)),
+                        ),
+                        icon: const Icon(Icons.dns_rounded, size: 15),
+                        label: const Text('DB / Test API', style: TextStyle(fontSize: 12)),
                       ),
                       OutlinedButton.icon(
                         onPressed: _isStarting ? null : _runInTerminal,
