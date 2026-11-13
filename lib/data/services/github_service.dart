@@ -100,18 +100,29 @@ class GitHubService {
         final repoData = jsonDecode(repoResponse.body) as Map<String, dynamic>;
         final defaultBranch = repoData['default_branch'] as String? ?? 'main';
         final description = repoData['description'] as String? ?? '';
+
+        // Check if pre-compiled gh-pages branch exists
+        var chosenBranch = defaultBranch;
+        try {
+          final ghPagesUrl = Uri.parse('https://api.github.com/repos/$owner/$repo/branches/gh-pages');
+          final ghPagesResp = await _client.get(ghPagesUrl, headers: headers);
+          if (ghPagesResp.statusCode == 200) {
+            chosenBranch = 'gh-pages';
+          }
+        } catch (_) {}
+
         return GitHubRelease(
           id: 0,
-          tagName: defaultBranch,
+          tagName: chosenBranch,
           name: repoData['name'] as String? ?? repo,
           body: description,
           publishedAt: DateTime.now(),
           assets: [
             GitHubAsset(
               id: 0,
-              name: '$repo-$defaultBranch.zip',
+              name: '$repo-$chosenBranch.zip',
               browserDownloadUrl:
-                  'https://github.com/$owner/$repo/archive/refs/heads/$defaultBranch.zip',
+                  'https://github.com/$owner/$repo/archive/refs/heads/$chosenBranch.zip',
               size: 0,
               contentType: 'application/zip',
             ),

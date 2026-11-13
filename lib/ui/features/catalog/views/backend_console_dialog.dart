@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../data/models/backend_requirement.dart';
@@ -59,10 +61,14 @@ class _BackendConsoleDialogState extends State<BackendConsoleDialog> {
         req.backendPort != null && await widget.viewModel.isPortListening(req.backendPort!);
     final viteUp =
         req.viteDevPort != null && await widget.viewModel.isPortListening(req.viteDevPort!);
-    final dbAvailable = req.hasDatabase ||
-        req.usesSqlServer ||
-        (req.databasePath != null && req.databasePath != 'SQLite' && req.databasePath != 'SQL Server') ||
-        (req.connectionString != null && req.connectionString!.isNotEmpty);
+    final dbFile = req.databasePath != null &&
+            req.databasePath != 'SQLite' &&
+            req.databasePath != 'SQL Server'
+        ? File(p.join(widget.app.installedPath, req.databasePath!))
+        : null;
+    final dbAvailable = req.hasDatabase &&
+        ((dbFile != null && dbFile.existsSync()) ||
+            (req.usesSqlServer && req.connectionString != null));
     if (!mounted) return;
     setState(() {
       _apiUp = apiUp;
@@ -237,10 +243,10 @@ class _BackendConsoleDialogState extends State<BackendConsoleDialog> {
                       'UI :${req.viteDevPort}',
                       _viteUp,
                     ),
-                  if (_dbAvailable)
+                  if (req.hasDatabase)
                     _statusChip(
                       req.usesSqlServer ? 'SQL Server' : 'Database',
-                      true,
+                      _dbAvailable,
                       idleColor: const Color(0xFFCC2927),
                     ),
                 ],

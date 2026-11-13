@@ -20,7 +20,10 @@ class HomeScreen extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: !viewModel.isInstalling,
-      builder: (ctx) => InstallAppDialog(viewModel: viewModel),
+      builder: (ctx) => InstallAppDialog(
+        viewModel: viewModel,
+        onInstalledLaunch: (installedApp) => _launchApp(context, viewModel, installedApp),
+      ),
     );
   }
 
@@ -32,6 +35,19 @@ class HomeScreen extends StatelessWidget {
         : app;
 
     if (req != null && req.hasRequirements) {
+      final hasRealBackend = req.requiresPython ||
+          req.requiresNode ||
+          req.requiresDotnet ||
+          req.backendPort != null ||
+          req.usesSqlServer;
+
+      // Pure frontend apps (even Vite / React / TypeScript) run directly in-app!
+      if (!hasRealBackend) {
+        if (!context.mounted) return;
+        _executeLaunch(context, viewModel, effectiveApp);
+        return;
+      }
+
       var isPortActive = await _areCompanionPortsReady(viewModel, app.id, req);
 
       // Auto-create / start missing backends before opening the UI.
@@ -375,126 +391,157 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.sports_esports, size: 20),
           ),
           const SizedBox(width: 4),
-          ElevatedButton.icon(
-            onPressed: () => _showInstallDialog(context, viewModel),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Install App'),
+          Builder(
+            builder: (ctx) {
+              final isSmall = MediaQuery.sizeOf(ctx).width < 480;
+              return isSmall
+                  ? IconButton.filled(
+                      tooltip: 'Install App',
+                      onPressed: () => _showInstallDialog(context, viewModel),
+                      icon: const Icon(Icons.add, size: 18),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: () => _showInstallDialog(context, viewModel),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Install App'),
+                    );
+            },
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
         ],
       ),
       body: Column(
         children: [
           // Subheader Toolbar: Search + Mode Switcher + Sort
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: const BoxDecoration(
-              color: WebDeckTheme.surface,
-              border: Border(bottom: BorderSide(color: WebDeckTheme.border)),
-            ),
-            child: Row(
-              children: [
-                // Search Input
-                Expanded(
-                  child: SizedBox(
-                    height: 38,
-                    child: TextField(
-                      onChanged: viewModel.setSearchQuery,
-                      decoration: InputDecoration(
-                        hintText: 'Search installed shelf apps...',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                        suffixIcon: viewModel.searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 16),
-                                onPressed: () => viewModel.setSearchQuery(''),
-                              )
-                            : null,
-                      ),
-                    ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 620;
+
+              final searchWidget = SizedBox(
+                height: 38,
+                child: TextField(
+                  onChanged: viewModel.setSearchQuery,
+                  decoration: InputDecoration(
+                    hintText: isNarrow ? 'Search apps...' : 'Search installed shelf apps...',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    suffixIcon: viewModel.searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () => viewModel.setSearchQuery(''),
+                          )
+                        : null,
                   ),
                 ),
-                const SizedBox(width: 12),
+              );
 
-                // Sort Dropdown
-                Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: WebDeckTheme.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: WebDeckTheme.border),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<AppSortOption>(
-                      value: viewModel.sortOption,
-                      dropdownColor: WebDeckTheme.surface,
-                      icon: const Icon(Icons.sort, size: 18),
-                      style: const TextStyle(fontSize: 12, color: WebDeckTheme.textPrimary),
-                      onChanged: (opt) {
-                        if (opt != null) viewModel.setSortOption(opt);
-                      },
-                      items: const [
-                        DropdownMenuItem(
-                          value: AppSortOption.dateNewest,
-                          child: Text('Newest First'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppSortOption.dateOldest,
-                          child: Text('Oldest First'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppSortOption.nameAsc,
-                          child: Text('Name (A-Z)'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppSortOption.nameDesc,
-                          child: Text('Name (Z-A)'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppSortOption.sizeLargest,
-                          child: Text('Largest Size'),
-                        ),
-                      ],
-                    ),
-                  ),
+              final sortWidget = Container(
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: WebDeckTheme.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: WebDeckTheme.border),
                 ),
-                const SizedBox(width: 10),
-
-                // View Mode Switcher: Grid, List, Icon-Only
-                Container(
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: WebDeckTheme.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: WebDeckTheme.border),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _viewModeButton(
-                        icon: Icons.grid_view_rounded,
-                        tooltip: 'Grid Cards',
-                        isSelected: viewModel.viewMode == ViewMode.grid,
-                        onTap: () => viewModel.setViewMode(ViewMode.grid),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<AppSortOption>(
+                    value: viewModel.sortOption,
+                    dropdownColor: WebDeckTheme.surface,
+                    icon: const Icon(Icons.sort, size: 18),
+                    style: const TextStyle(fontSize: 12, color: WebDeckTheme.textPrimary),
+                    onChanged: (opt) {
+                      if (opt != null) viewModel.setSortOption(opt);
+                    },
+                    items: const [
+                      DropdownMenuItem(
+                        value: AppSortOption.dateNewest,
+                        child: Text('Newest First'),
                       ),
-                      _viewModeButton(
-                        icon: Icons.view_list_rounded,
-                        tooltip: 'List View',
-                        isSelected: viewModel.viewMode == ViewMode.list,
-                        onTap: () => viewModel.setViewMode(ViewMode.list),
+                      DropdownMenuItem(
+                        value: AppSortOption.dateOldest,
+                        child: Text('Oldest First'),
                       ),
-                      _viewModeButton(
-                        icon: Icons.apps_rounded,
-                        tooltip: 'App Shelf (Icons Only)',
-                        isSelected: viewModel.viewMode == ViewMode.iconOnly,
-                        onTap: () => viewModel.setViewMode(ViewMode.iconOnly),
+                      DropdownMenuItem(
+                        value: AppSortOption.nameAsc,
+                        child: Text('Name (A-Z)'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppSortOption.nameDesc,
+                        child: Text('Name (Z-A)'),
+                      ),
+                      DropdownMenuItem(
+                        value: AppSortOption.sizeLargest,
+                        child: Text('Largest Size'),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
+              );
+
+              final viewModeWidget = Container(
+                height: 38,
+                decoration: BoxDecoration(
+                  color: WebDeckTheme.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: WebDeckTheme.border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _viewModeButton(
+                      icon: Icons.grid_view_rounded,
+                      tooltip: 'Grid Cards',
+                      isSelected: viewModel.viewMode == ViewMode.grid,
+                      onTap: () => viewModel.setViewMode(ViewMode.grid),
+                    ),
+                    _viewModeButton(
+                      icon: Icons.view_list_rounded,
+                      tooltip: 'List View',
+                      isSelected: viewModel.viewMode == ViewMode.list,
+                      onTap: () => viewModel.setViewMode(ViewMode.list),
+                    ),
+                    _viewModeButton(
+                      icon: Icons.apps_rounded,
+                      tooltip: 'App Shelf (Icons Only)',
+                      isSelected: viewModel.viewMode == ViewMode.iconOnly,
+                      onTap: () => viewModel.setViewMode(ViewMode.iconOnly),
+                    ),
+                  ],
+                ),
+              );
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: const BoxDecoration(
+                  color: WebDeckTheme.surface,
+                  border: Border(bottom: BorderSide(color: WebDeckTheme.border)),
+                ),
+                child: isNarrow
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          searchWidget,
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              sortWidget,
+                              viewModeWidget,
+                            ],
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(child: searchWidget),
+                          const SizedBox(width: 12),
+                          sortWidget,
+                          const SizedBox(width: 10),
+                          viewModeWidget,
+                        ],
+                      ),
+              );
+            },
           ),
 
           // Filters Bar: Framework Chips + Running Toggle
@@ -674,10 +721,17 @@ class HomeScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                       child: Image.file(File(app.localIconPath!), fit: BoxFit.cover),
                     )
-                  : Center(
-                      child: Text(
-                        app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        'assets/icons/app_icon.png',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Center(
+                          child: Text(
+                            app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                          ),
+                        ),
                       ),
                     ),
             ),
@@ -838,13 +892,20 @@ class HomeScreen extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(18),
                                 child: Image.file(File(app.localIconPath!), fit: BoxFit.cover),
                               )
-                            : Center(
-                                child: Text(
-                                  app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
-                                  style: const TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: Image.asset(
+                                  'assets/icons/app_icon.png',
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => Center(
+                                    child: Text(
+                                      app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
+                                      style: const TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),

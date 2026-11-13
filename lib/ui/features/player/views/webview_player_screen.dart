@@ -37,6 +37,7 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   bool _isWebViewSupported = true;
   bool _showControls = false;
   String? _initError;
+  String? _pageLoadError;
 
   @override
   void initState() {
@@ -78,13 +79,26 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
       controller.setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            if (mounted) setState(() => _isLoading = true);
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+                _pageLoadError = null;
+              });
+            }
           },
           onPageFinished: (String url) {
             if (mounted) setState(() => _isLoading = false);
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView resource error: ${error.description}');
+            if (error.isForMainFrame ?? true) {
+              if (mounted) {
+                setState(() {
+                  _pageLoadError = error.description;
+                  _isLoading = false;
+                });
+              }
+            }
           },
         ),
       );
@@ -93,13 +107,56 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
         final androidController = controller.platform as AndroidWebViewController;
         AndroidWebViewController.enableDebugging(true);
         androidController.setMediaPlaybackRequiresUserGesture(false);
+        androidController.setAllowFileAccess(true);
+        androidController.setAllowContentAccess(true);
+        androidController.setMixedContentMode(MixedContentMode.alwaysAllow);
+        androidController.setOnPlatformPermissionRequest((request) => request.grant());
         androidController.setOnShowFileSelector((FileSelectorParams params) async {
           try {
+            FileType pickerType = FileType.any;
+            List<String>? allowedExtensions;
+
+            if (params.acceptTypes.isNotEmpty) {
+              final types = params.acceptTypes
+                  .map((t) => t.trim().toLowerCase())
+                  .where((t) => t.isNotEmpty)
+                  .toList();
+              final allImages = types.isNotEmpty &&
+                  types.every((t) => t.startsWith('image/') || t == 'image/*');
+              final allAudio = types.isNotEmpty &&
+                  types.every((t) => t.startsWith('audio/') || t == 'audio/*');
+              final allVideo = types.isNotEmpty &&
+                  types.every((t) => t.startsWith('video/') || t == 'video/*');
+
+              if (allImages) {
+                pickerType = FileType.image;
+              } else if (allAudio) {
+                pickerType = FileType.audio;
+              } else if (allVideo) {
+                pickerType = FileType.video;
+              } else {
+                final exts = types
+                    .where((t) => t.startsWith('.'))
+                    .map((t) => t.substring(1))
+                    .toList();
+                if (exts.isNotEmpty) {
+                  pickerType = FileType.custom;
+                  allowedExtensions = exts;
+                }
+              }
+            }
+
             final List<PlatformFile> files;
             if (params.mode == FileSelectorMode.openMultiple) {
-              files = await FilePicker.pickFiles();
+              files = await FilePicker.pickFiles(
+                type: pickerType,
+                allowedExtensions: allowedExtensions,
+              );
             } else {
-              final single = await FilePicker.pickFile();
+              final single = await FilePicker.pickFile(
+                type: pickerType,
+                allowedExtensions: allowedExtensions,
+              );
               files = single != null ? [single] : [];
             }
             if (files.isNotEmpty) {
@@ -153,67 +210,84 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     // True in-app native browser experience without external browser windows or URL bars
-    return Scaffold(
-      backgroundColor: WebDeckTheme.background,
-      body: SafeArea(
-        top: !_showControls,
-        bottom: false,
-        child: Stack(
-          children: [
-            // Embedded Native WebView (Full Screen)
-            Positioned.fill(
-              child: _isWebViewSupported && _controller != null
-                  ? WebViewWidget(controller: _controller!)
-                  : _buildFallbackView(),
-            ),
-
-            // Subtle top progress bar while loading
-            if (_isLoading && _isWebViewSupported)
-              const Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: LinearProgressIndicator(
-                  minHeight: 2.5,
-                  backgroundColor: Colors.transparent,
-                  valueColor: AlwaysStoppedAnimation(WebDeckTheme.primary),
-                ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final controller = _controller;
+        if (controller != null && await controller.canGoBack()) {
+          await controller.goBack();
+        } else {
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
+        backgroundColor: WebDeckTheme.background,
+        body: SafeArea(
+          top: !_showControls,
+          bottom: false,
+          child: Stack(
+            children: [
+              // Embedded Native WebView (Full Screen)
+              Positioned.fill(
+                child: !_isWebViewSupported
+                    ? _buildFallbackView()
+                    : _pageLoadError != null
+                        ? _buildPageLoadErrorView()
+                        : WebViewWidget(controller: _controller!),
               ),
 
-            // Floating Minimal Control Capsule (Hover or tap to reveal)
-            Positioned(
-              top: 12,
-              right: 16,
-              child: MouseRegion(
-                onEnter: (_) => setState(() => _showControls = true),
-                onExit: (_) => setState(() => _showControls = false),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+              // Subtle top progress bar while loading
+              if (_isLoading && _isWebViewSupported)
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(
+                    minHeight: 2.5,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(WebDeckTheme.primary),
                   ),
-                  decoration: BoxDecoration(
-                    color: WebDeckTheme.surface.withValues(
-                      alpha: _showControls ? 0.95 : 0.6,
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: WebDeckTheme.border.withValues(
-                        alpha: _showControls ? 0.9 : 0.4,
+                ),
+
+              // Floating Minimal Control Capsule (Hover on desktop, tap on mobile to reveal)
+              Positioned(
+                top: 12,
+                right: 16,
+                child: MouseRegion(
+                  onEnter: (_) => setState(() => _showControls = true),
+                  onExit: (_) => setState(() => _showControls = false),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _showControls = !_showControls),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                      decoration: BoxDecoration(
+                        color: WebDeckTheme.surface.withValues(
+                          alpha: _showControls ? 0.95 : 0.6,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: WebDeckTheme.border.withValues(
+                            alpha: _showControls ? 0.9 : 0.4,
+                          ),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                       if (_showControls) ...[
                         Text(
                           widget.app.name,
@@ -257,7 +331,166 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
                 ),
               ),
             ),
-          ],
+          ),
+        ],
+      ),
+    ),
+  ),
+);
+}
+
+  void _retryLoading() {
+    setState(() {
+      _pageLoadError = null;
+      _isLoading = true;
+    });
+    if (_controller != null) {
+      _controller!.loadRequest(Uri.parse(widget.launchUrl));
+    } else {
+      _initWebView();
+    }
+  }
+
+  Widget _buildPageLoadErrorView() {
+    final req = widget.app.backendRequirement;
+    final isVite = req?.requiresViteDev == true;
+    final isPython = req?.requiresPython == true;
+    final isNode = req?.requiresNode == true;
+    final isDotnet = req?.requiresDotnet == true;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: WebDeckTheme.accentRed.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: WebDeckTheme.accentRed.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.wifi_off_rounded,
+                  color: WebDeckTheme.accentRed,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Web App Server Not Responding',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: WebDeckTheme.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: WebDeckTheme.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: WebDeckTheme.border),
+                ),
+                child: Text(
+                  '${widget.launchUrl} • ${_pageLoadError ?? "ERR_EMPTY_RESPONSE"}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                    color: Color(0xFFD29922),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: WebDeckTheme.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: WebDeckTheme.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Why is this happening?',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: WebDeckTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (isVite)
+                      Text(
+                        '• This app requires an active Vite dev server (npm run dev) on port ${widget.port}.',
+                        style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary),
+                      ),
+                    if (isPython)
+                      Text(
+                        '• This app requires a Python companion server (${req?.pythonScript ?? "serve.py"}) on port ${widget.port}.',
+                        style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary),
+                      ),
+                    if (isNode)
+                      Text(
+                        '• This app requires a Node.js companion (${req?.nodeScript ?? "server.js"}) on port ${widget.port}.',
+                        style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary),
+                      ),
+                    if (isDotnet)
+                      Text(
+                        '• This app requires a .NET backend (${req?.dotnetProject ?? "server"}) on port ${widget.port}.',
+                        style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary),
+                      ),
+                    if (Platform.isAndroid) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '• On Android connected via USB, forward your computer port with:\n   adb reverse tcp:${widget.port} tcp:${widget.port}',
+                        style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _retryLoading,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry Connection'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: WebDeckTheme.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  if (req?.hasRequirements == true)
+                    OutlinedButton.icon(
+                      onPressed: _openBackendConsole,
+                      icon: const Icon(Icons.dns_rounded, size: 16),
+                      label: const Text('Backend Setup'),
+                    ),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back, size: 16),
+                    label: const Text('Back to Apps'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

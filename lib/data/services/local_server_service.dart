@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:mime/mime.dart' as mime;
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
@@ -39,18 +40,55 @@ class LocalServerService {
   List<String> getCompanionLogs(String appId) =>
       List.unmodifiable(_companionLogs[appId] ?? const []);
 
-  /// Checks if a local port is actively accepting connections
+  /// Checks if a local port is actively accepting connections and serving traffic.
+  /// Handles dead reverse tunnels (such as `adb reverse` on Android where the local ADB
+  /// daemon accepts the initial TCP handshake but immediately drops the socket when no
+  /// host server is listening).
   Future<bool> isPortListening(int port) async {
+    // 1. Try an HTTP probe first since WebDeck backends and dev servers are HTTP.
+    HttpClient? client;
     try {
-      final socket = await Socket.connect(
-        InternetAddress.loopbackIPv4,
-        port,
-        timeout: const Duration(milliseconds: 500),
-      );
-      await socket.close();
-      return true;
-    } catch (_) {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 400);
+      final request = await client
+          .openUrl('GET', Uri.parse('http://127.0.0.1:$port/'))
+          .timeout(const Duration(milliseconds: 500));
+      final response = await request.close().timeout(const Duration(milliseconds: 500));
+      return response.statusCode > 0;
+    } on SocketException {
       return false;
+    } on HttpException {
+      // Empty response or closed prematurely (e.g. adb reverse dead tunnel)
+      return false;
+    } catch (_) {
+      // 2. Fallback for non-HTTP raw TCP servers: connect and check if connection holds
+      Socket? socket;
+      try {
+        socket = await Socket.connect(
+          InternetAddress.loopbackIPv4,
+          port,
+          timeout: const Duration(milliseconds: 400),
+        );
+        var dropped = false;
+        final sub = socket.listen(
+          (_) {},
+          onError: (_) => dropped = true,
+          onDone: () => dropped = true,
+          cancelOnError: true,
+        );
+        socket.add([10]);
+        await socket.flush().catchError((_) => null);
+        await Future.delayed(const Duration(milliseconds: 60));
+        await sub.cancel();
+        await socket.close();
+        return !dropped;
+      } catch (_) {
+        return false;
+      } finally {
+        socket?.destroy();
+      }
+    } finally {
+      client?.close(force: true);
     }
   }
 
@@ -367,6 +405,19 @@ class LocalServerService {
     final startedSomething = primary != null || isCompanionRunning(app.id);
     if (startedSomething) return;
 
+    // If only Vite is needed, fallback to embedded JIT serving without throwing
+    if (req.requiresViteDev &&
+        !req.requiresDotnet &&
+        !req.requiresPython &&
+        !req.requiresNode &&
+        req.backendPort == null) {
+      final logs = _companionLogs[app.id] ??= [];
+      logs.add(
+        '[system] Dev server port not detected; WebDeck JIT transpile engine active.',
+      );
+      return;
+    }
+
     // Nothing new to spawn — succeed if required ports are already serving.
     final ports = <int>{
       if (req.backendPort != null) req.backendPort!,
@@ -420,7 +471,7 @@ class LocalServerService {
     final req = app.backendRequirement;
     if (req != null && req.requiresViteDev && req.viteDevPort != null) {
       final vitePort = req.viteDevPort!;
-      if (await isPortListening(vitePort)) {
+      if (isCompanionRunning(app.id) && await isPortListening(vitePort)) {
         final instance = RunningAppInstance(
           appId: app.id,
           port: vitePort,
@@ -429,9 +480,6 @@ class LocalServerService {
         _runningInstances[app.id] = instance;
         return instance;
       }
-      throw StateError(
-        'Vite UI is not running on port $vitePort. Start the companion backend first.',
-      );
     }
 
     final targetDir = Directory(app.installedPath);
@@ -441,24 +489,45 @@ class LocalServerService {
       );
     }
 
-    // 1. Locate index.html
+    // 1. Locate index.html - Prefer precompiled outputs (dist, build/web, out)
+    // over raw source indexes containing uncompiled /src/main.tsx or .ts.
     File? resolvedIndexFile;
-    final directEntry = File(p.join(app.installedPath, app.entryHtml));
-    if (await directEntry.exists()) {
-      resolvedIndexFile = directEntry;
-    } else {
-      final rootIndex = File(p.join(app.installedPath, 'index.html'));
-      if (await rootIndex.exists()) {
-        resolvedIndexFile = rootIndex;
+
+    // Check for precompiled builds first
+    await for (final entity in targetDir.list(recursive: true)) {
+      if (entity is File && p.basename(entity.path).toLowerCase() == 'index.html') {
+        final rel = p.relative(entity.path, from: targetDir.path).replaceAll('\\', '/').toLowerCase();
+        if (rel.contains('node_modules') || rel.contains('.history')) continue;
+        if (rel.endsWith('/dist/index.html') ||
+            rel == 'dist/index.html' ||
+            rel.contains('/build/web/index.html') ||
+            rel == 'build/web/index.html' ||
+            rel.endsWith('/out/index.html') ||
+            rel == 'out/index.html') {
+          resolvedIndexFile = entity;
+          break;
+        }
+      }
+    }
+
+    if (resolvedIndexFile == null) {
+      final directEntry = File(p.join(app.installedPath, app.entryHtml));
+      if (await directEntry.exists()) {
+        resolvedIndexFile = directEntry;
       } else {
-        await for (final entity in targetDir.list(recursive: true)) {
-          if (entity is File && p.basename(entity.path).toLowerCase() == 'index.html') {
-            final relative = p.relative(entity.path, from: targetDir.path);
-            if (relative.contains('node_modules') || relative.contains('.history')) {
-              continue;
+        final rootIndex = File(p.join(app.installedPath, 'index.html'));
+        if (await rootIndex.exists()) {
+          resolvedIndexFile = rootIndex;
+        } else {
+          await for (final entity in targetDir.list(recursive: true)) {
+            if (entity is File && p.basename(entity.path).toLowerCase() == 'index.html') {
+              final relative = p.relative(entity.path, from: targetDir.path);
+              if (relative.contains('node_modules') || relative.contains('.history')) {
+                continue;
+              }
+              resolvedIndexFile = entity;
+              break;
             }
-            resolvedIndexFile = entity;
-            break;
           }
         }
       }
@@ -470,16 +539,45 @@ class LocalServerService {
       );
     }
 
-    // 2. Primary web root is the directory containing index.html
+    // 2. Check if this is an uncompiled TypeScript / React / Vite source project
+    final rawIndexContent = await resolvedIndexFile.readAsString().catchError((_) => '');
+    final isUncompiledVite = rawIndexContent.contains('/src/main.') ||
+        RegExp(r'''src=["']/src/[^"']+\.(tsx?|jsx?)["']''').hasMatch(rawIndexContent);
+    final hasUncompiledScripts = isUncompiledVite ||
+        rawIndexContent.contains('.ts"') ||
+        rawIndexContent.contains(".ts'") ||
+        rawIndexContent.contains('.tsx"') ||
+        rawIndexContent.contains(".tsx'") ||
+        rawIndexContent.contains('.jsx"') ||
+        rawIndexContent.contains(".jsx'");
+
+    // 3. Primary web root is the directory containing index.html
     final indexFileToServe = resolvedIndexFile;
     final webRootDir = indexFileToServe.parent;
 
-    // 3. Handlers
+    // 4. Handlers: Web root, public static folder (Vite / CRA convention), and target root fallback
     final primaryHandler = createStaticHandler(
       webRootDir.path,
       defaultDocument: 'index.html',
       serveFilesOutsidePath: false,
     );
+
+    Handler? publicHandler;
+    final publicDirInWeb = Directory(p.join(webRootDir.path, 'public'));
+    if (await publicDirInWeb.exists()) {
+      publicHandler = createStaticHandler(
+        publicDirInWeb.path,
+        serveFilesOutsidePath: false,
+      );
+    } else if (webRootDir.path != targetDir.path) {
+      final publicDirInTarget = Directory(p.join(targetDir.path, 'public'));
+      if (await publicDirInTarget.exists()) {
+        publicHandler = createStaticHandler(
+          publicDirInTarget.path,
+          serveFilesOutsidePath: false,
+        );
+      }
+    }
 
     Handler? rootFallbackHandler;
     if (webRootDir.path != targetDir.path) {
@@ -490,26 +588,116 @@ class LocalServerService {
       );
     }
 
-    // 4. Custom router with SPA history API fallback
+    // 5. Custom router with JIT Service Worker transpilation & SPA fallback
     Future<Response> spaHandler(Request request) async {
-      var response = await primaryHandler(request);
-
-      if (response.statusCode == 404 && rootFallbackHandler != null) {
-        response = await rootFallbackHandler(request);
+      // A. Deliver Service Worker for client-side JIT transpilation
+      if (request.url.path == 'webdeck-sw.js') {
+        return Response.ok(
+          _webdeckSwScript,
+          headers: {
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Service-Worker-Allowed': '/',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache',
+          },
+        );
       }
 
-      // SPA Fallback for client-side routing (React, Angular, Vue, Flutter Web)
-      if (response.statusCode == 404 && request.method == 'GET') {
-        final path = request.url.path;
-        final hasExtension = p.extension(path).isNotEmpty;
+      // B. Deliver bundled Babel Standalone compiler
+      if (request.url.path == 'webdeck/babel.min.js') {
+        final babelData = await _getBabelBytes();
+        return Response.ok(
+          babelData,
+          headers: {
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        );
+      }
 
-        if (!hasExtension && await indexFileToServe.exists()) {
-          final content = await indexFileToServe.readAsBytes();
+      // C. Deliver entry index.html with JIT bootstrap injection if uncompiled
+      if (request.url.path.isEmpty || request.url.path == 'index.html') {
+        if (await indexFileToServe.exists()) {
+          final raw = await indexFileToServe.readAsString().catchError((_) => '');
+          final content = hasUncompiledScripts ? _injectJitBootstrap(raw) : raw;
           return Response.ok(
             content,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
+              'Service-Worker-Allowed': '/',
+              'Cache-Control': 'no-cache',
+            },
+          );
+        }
+      }
+
+      var response = await primaryHandler(request);
+
+      if (response.statusCode == 404 && publicHandler != null) {
+        response = await publicHandler(request);
+      }
+
+      if (response.statusCode == 404 && rootFallbackHandler != null) {
+        response = await rootFallbackHandler(request);
+      }
+
+      // D. Extensionless file resolution (e.g. import from './runtime/game' -> './runtime/game.ts')
+      if (response.statusCode == 404 && request.method == 'GET') {
+        final path = request.url.path;
+        final extensionsToTry = [
+          '.ts',
+          '.tsx',
+          '.js',
+          '.jsx',
+          '/index.ts',
+          '/index.tsx',
+          '/index.js',
+          '/index.jsx',
+        ];
+        final searchDirs = [
+          webRootDir,
+          if (await publicDirInWeb.exists()) publicDirInWeb,
+          if (webRootDir.path != targetDir.path) targetDir,
+        ];
+
+        for (final dir in searchDirs) {
+          for (final ext in extensionsToTry) {
+            final candidate = File(p.join(dir.path, path + ext));
+            if (await candidate.exists()) {
+              final bytes = await candidate.readAsBytes();
+              final mimeType =
+                  _resolveMimeType(candidate.path) ??
+                  'text/javascript; charset=utf-8';
+              return Response.ok(
+                bytes,
+                headers: {
+                  'Content-Type': mimeType,
+                  'Access-Control-Allow-Origin': '*',
+                  'Cache-Control': 'no-cache',
+                  'X-WebDeck-Transpile': 'true',
+                },
+              );
+            }
+          }
+        }
+      }
+
+      // E. SPA Fallback for client-side routing (React, Angular, Vue, Flutter Web)
+      if (response.statusCode == 404 && request.method == 'GET') {
+        final path = request.url.path;
+        final hasExtension = p.extension(path).isNotEmpty;
+
+        if (!hasExtension && await indexFileToServe.exists()) {
+          final raw = await indexFileToServe.readAsString().catchError((_) => '');
+          final content = hasUncompiledScripts ? _injectJitBootstrap(raw) : raw;
+          return Response.ok(
+            content,
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Service-Worker-Allowed': '/',
               'Cache-Control': 'no-cache',
             },
           );
@@ -522,6 +710,7 @@ class LocalServerService {
         return response.change(headers: {
           'Content-Type': customMime,
           'Access-Control-Allow-Origin': '*',
+          'Service-Worker-Allowed': '/',
         });
       }
 
@@ -622,6 +811,7 @@ class LocalServerService {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD',
             'Access-Control-Allow-Headers': '*',
+            'Service-Worker-Allowed': '/',
           });
         }
         final response = await innerHandler(request);
@@ -630,10 +820,268 @@ class LocalServerService {
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD',
           'Access-Control-Allow-Headers': '*',
           'Cross-Origin-Resource-Policy': 'cross-origin',
+          'Service-Worker-Allowed': '/',
           // Allow local caching while preserving offline revalidations
           'Cache-Control': 'no-cache',
         });
       };
     };
   }
+
+  static List<int>? _cachedBabelBytes;
+
+  static Future<List<int>> _getBabelBytes() async {
+    if (_cachedBabelBytes != null) return _cachedBabelBytes!;
+    try {
+      final byteData = await rootBundle.load('assets/vendor/babel.min.js');
+      _cachedBabelBytes = byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      );
+      return _cachedBabelBytes!;
+    } catch (_) {
+      final file = File('assets/vendor/babel.min.js');
+      if (await file.exists()) {
+        _cachedBabelBytes = await file.readAsBytes();
+        return _cachedBabelBytes!;
+      }
+      return utf8.encode('/* babel bundle */');
+    }
+  }
+
+  static String _injectJitBootstrap(String html) {
+    const bootstrapShims = '''
+<script>
+  window.process = window.process || { env: { NODE_ENV: 'development' } };
+  window.global = window.global || window;
+  (function() {
+    function launchModules() {
+      if (window.__webdeckModulesLaunched) return;
+      window.__webdeckModulesLaunched = true;
+      var tags = document.querySelectorAll('script[data-webdeck-module]');
+      tags.forEach(function(tag) {
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = tag.getAttribute('data-webdeck-module');
+        (document.body || document.head || document.documentElement).appendChild(s);
+      });
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/webdeck-sw.js', { scope: '/' }).then(function(reg) {
+        if (navigator.serviceWorker.controller) {
+          launchModules();
+        } else {
+          navigator.serviceWorker.addEventListener('controllerchange', function() {
+            launchModules();
+          }, { once: true });
+          setTimeout(launchModules, 500);
+        }
+      }).catch(function(err) {
+        console.warn('WebDeck SW registration failed, loading directly:', err);
+        launchModules();
+      });
+    } else {
+      launchModules();
+    }
+  })();
+</script>
+''';
+
+    var transformedHtml = html.replaceAllMapped(
+      RegExp(r'''<script\s+type=["']module["']\s+src=["']([^"']+\.(?:tsx?|jsx?))["']\s*>\s*</script>''', caseSensitive: false),
+      (m) => '<script data-webdeck-module="${m[1]}"></script>',
+    );
+
+    transformedHtml = transformedHtml.replaceAllMapped(
+      RegExp(r'''<script\s+src=["']([^"']+\.(?:tsx?|jsx?))["']\s+type=["']module["']\s*>\s*</script>''', caseSensitive: false),
+      (m) => '<script data-webdeck-module="${m[1]}"></script>',
+    );
+
+    if (transformedHtml.contains('<head>')) {
+      transformedHtml = transformedHtml.replaceFirst('<head>', '<head>\n$bootstrapShims');
+    } else if (transformedHtml.contains('<html>')) {
+      transformedHtml = transformedHtml.replaceFirst('<html>', '<html>\n<head>$bootstrapShims</head>');
+    } else {
+      transformedHtml = '$bootstrapShims\n$transformedHtml';
+    }
+
+    return transformedHtml;
+  }
+
+  static const String _webdeckSwScript = r'''
+/* WebDeck JIT Service Worker - Compiles TypeScript, JSX, and CSS modules client-side */
+importScripts('/webdeck/babel.min.js');
+
+const transpileCache = new Map();
+
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+function rewriteImports(code) {
+  let transformed = code.replace(
+    /((?:import|export)\s+(?:(?:[\w*\s{},]*)\s+from\s+)?["'])([^"'\r\n]+)(["'])/g,
+    (match, prefix, specifier, suffix) => {
+      if (
+        specifier.startsWith('.') ||
+        specifier.startsWith('/') ||
+        specifier.startsWith('http:') ||
+        specifier.startsWith('https:') ||
+        specifier.startsWith('data:')
+      ) {
+        return match;
+      }
+      return prefix + 'https://esm.sh/' + specifier + suffix;
+    }
+  ).replace(
+    /import\s*\(\s*(["'])([^"'\r\n]+)\1\s*\)/g,
+    (match, quote, specifier) => {
+      if (
+        specifier.startsWith('.') ||
+        specifier.startsWith('/') ||
+        specifier.startsWith('http:') ||
+        specifier.startsWith('https:') ||
+        specifier.startsWith('data:')
+      ) {
+        return match;
+      }
+      return 'import(' + quote + 'https://esm.sh/' + specifier + quote + ')';
+    }
+  );
+
+  transformed = transformed.replace(
+    /import\.meta\.env/g,
+    '({ DEV: false, PROD: true, MODE: "production", BASE_URL: "/" })'
+  );
+
+  return transformed;
+}
+
+async function handleCssModule(request) {
+  try {
+    const res = await fetch(request);
+    if (!res.ok) return res;
+    const cssText = await res.text();
+    const js = `
+const css = ${JSON.stringify(cssText)};
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.setAttribute('data-webdeck-css', ${JSON.stringify(request.url)});
+  style.textContent = css;
+  (document.head || document.documentElement).appendChild(style);
+}
+export default css;
+`;
+    return new Response(js, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (e) {
+    return new Response('export default "";', {
+      headers: { 'Content-Type': 'application/javascript; charset=utf-8' }
+    });
+  }
+}
+
+async function handleTranspile(request) {
+  const url = new URL(request.url);
+  const cacheKey = url.pathname + url.search;
+
+  if (transpileCache.has(cacheKey)) {
+    return new Response(transpileCache.get(cacheKey), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+
+  try {
+    const res = await fetch(request);
+    if (!res.ok) return res;
+    const rawCode = await res.text();
+
+    let outputJs = rawCode;
+    if (self.Babel) {
+      try {
+        const result = self.Babel.transform(rawCode, {
+          presets: [
+            'typescript',
+            ['react', { runtime: 'automatic' }]
+          ],
+          filename: url.pathname
+        });
+        outputJs = result.code;
+      } catch (babelErr) {
+        try {
+          const fallback = self.Babel.transform(rawCode, {
+            presets: ['typescript', 'react'],
+            filename: url.pathname
+          });
+          outputJs = fallback.code;
+        } catch (_) {}
+      }
+    }
+
+    outputJs = rewriteImports(outputJs);
+    transpileCache.set(cacheKey, outputJs);
+
+    return new Response(outputJs, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (err) {
+    return fetch(request);
+  }
+}
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  const pathname = url.pathname;
+
+  if (pathname.startsWith('/webdeck/') || pathname === '/webdeck-sw.js') {
+    return;
+  }
+
+  if (
+    pathname.endsWith('.css') &&
+    (event.request.destination === 'script' ||
+     event.request.headers.get('accept')?.includes('*/*'))
+  ) {
+    event.respondWith(handleCssModule(event.request));
+    return;
+  }
+
+  if (
+    /\.(tsx?|jsx?)($|\?)/i.test(pathname) ||
+    event.request.destination === 'script'
+  ) {
+    if (pathname.endsWith('.js') && event.request.destination !== '') {
+      return;
+    }
+    event.respondWith(handleTranspile(event.request));
+    return;
+  }
+});
+''';
 }

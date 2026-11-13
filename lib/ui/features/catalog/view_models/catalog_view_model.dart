@@ -30,6 +30,7 @@ class CatalogViewModel extends ChangeNotifier {
   InstallProgress? _currentInstallProgress;
   String _searchQuery = '';
   String? _errorMessage;
+  InstalledApp? _lastInstalledApp;
 
   ViewMode _viewMode = ViewMode.grid;
   AppSortOption _sortOption = AppSortOption.dateNewest;
@@ -46,6 +47,7 @@ class CatalogViewModel extends ChangeNotifier {
   InstallProgress? get currentInstallProgress => _currentInstallProgress;
   String get searchQuery => _searchQuery;
   String? get errorMessage => _errorMessage;
+  InstalledApp? get lastInstalledApp => _lastInstalledApp;
 
   ViewMode get viewMode => _viewMode;
   AppSortOption get sortOption => _sortOption;
@@ -169,7 +171,7 @@ class CatalogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _repository.installFromSource(
+      _lastInstalledApp = await _repository.installFromSource(
         sourceInput: sourceUrl,
         token: token,
         customName: customName,
@@ -205,7 +207,7 @@ class CatalogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _repository.installFromLocalZipFile(
+      _lastInstalledApp = await _repository.installFromLocalZipFile(
         zipFile: zipFile,
         customName: customName,
         onProgress: (progress) {
@@ -240,7 +242,7 @@ class CatalogViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _repository.installFromLocalDirectory(
+      _lastInstalledApp = await _repository.installFromLocalDirectory(
         sourceDir: directory,
         customName: customName,
         onProgress: (progress) {
@@ -326,7 +328,7 @@ class CatalogViewModel extends ChangeNotifier {
 
     try {
       final zipBytes = DemoAppsFactory.createArcadeDemoZip();
-      await _repository.installFromBytes(
+      _lastInstalledApp = await _repository.installFromBytes(
         appId: 'neon_arcade_2048',
         name: 'Neon Arcade 2048',
         version: '1.0.4',

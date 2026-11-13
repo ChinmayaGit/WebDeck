@@ -429,13 +429,20 @@ class AppCard extends StatelessWidget {
   }
 
   Widget _fallbackLetter() {
-    return Center(
-      child: Text(
-        app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
-        style: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.asset(
+        'assets/icons/app_icon.png',
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Center(
+          child: Text(
+            app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
         ),
       ),
     );

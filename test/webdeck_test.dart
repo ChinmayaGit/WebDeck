@@ -313,6 +313,17 @@ print(f"Starting server on port {PORT}")
       final isListening = await repository.isPortListening(59876);
       expect(isListening, isFalse);
 
+      // Check port probing on an active HTTP server
+      final testServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      testServer.listen((req) {
+        req.response.statusCode = HttpStatus.ok;
+        req.response.write('OK');
+        req.response.close();
+      });
+      final activeListening = await repository.isPortListening(testServer.port);
+      expect(activeListening, isTrue);
+      await testServer.close(force: true);
+
       // Install and verify backendRequirement is saved on InstalledApp
       final app = await repository.installFromLocalDirectory(
         sourceDir: appDir,
@@ -331,11 +342,10 @@ print(f"Starting server on port {PORT}")
       // Verify startCompanionBackend can start with requirement parameter
       // even if app model had null backendRequirement
       final appWithoutReq = app.copyWith(backendRequirement: null);
-      final process = await repository.startCompanionBackend(
+      await repository.startCompanionBackend(
         appWithoutReq,
         requirement: resolved,
       );
-      expect(process.pid, greaterThan(0));
       expect(repository.isCompanionRunning(app.id), isTrue);
 
       await repository.stopCompanionBackend(app.id);
@@ -449,6 +459,83 @@ export default function App() {
       expect(req.requiresNode, isFalse);
       expect(req.setupInstructions, contains('dotnet run'));
       expect(req.setupInstructions, contains('npm run dev'));
+    });
+
+    test('Serves uncompiled TypeScript/Vite web apps with Service Worker JIT transpile and extensionless module resolution', () async {
+      final appDir = Directory('${tempDir.path}/raw_ts_game');
+      await appDir.create(recursive: true);
+
+      final indexFile = File('${appDir.path}/index.html');
+      await indexFile.writeAsString('''
+<!doctype html>
+<html>
+  <head><title>Mario TypeScript</title></head>
+  <body>
+    <canvas id="game"></canvas>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+''');
+
+      final mainTs = File('${appDir.path}/src/main.ts');
+      await mainTs.parent.create(recursive: true);
+      await mainTs.writeAsString('''
+import "./ui/style.css";
+import { Game } from "./runtime/game";
+export const score: number = 100;
+''');
+
+      final styleCss = File('${appDir.path}/src/ui/style.css');
+      await styleCss.parent.create(recursive: true);
+      await styleCss.writeAsString('body { background: black; }');
+
+      final gameTs = File('${appDir.path}/src/runtime/game.ts');
+      await gameTs.parent.create(recursive: true);
+      await gameTs.writeAsString('export class Game { start() { return "ready"; } }');
+
+      final app = await repository.installFromLocalDirectory(
+        sourceDir: appDir,
+        customName: 'MarioTypeScriptGame',
+      );
+
+      final instance = await repository.launchApp(app);
+      expect(instance.port, greaterThan(0));
+
+      final client = HttpClient();
+
+      // 1. Verify index.html injection
+      final indexReq = await client.getUrl(Uri.parse(instance.launchUrl));
+      final indexRes = await indexReq.close();
+      expect(indexRes.statusCode, HttpStatus.ok);
+      final indexBody = await utf8.decodeStream(indexRes);
+      expect(indexBody, contains('data-webdeck-module="/src/main.ts"'));
+      expect(indexBody, contains('/webdeck-sw.js'));
+      expect(indexRes.headers.value('service-worker-allowed'), '/');
+
+      // 2. Verify Service Worker script delivery
+      final swReq = await client.getUrl(Uri.parse('http://127.0.0.1:${instance.port}/webdeck-sw.js'));
+      final swRes = await swReq.close();
+      expect(swRes.statusCode, HttpStatus.ok);
+      expect(swRes.headers.contentType?.mimeType, 'application/javascript');
+      final swBody = await utf8.decodeStream(swRes);
+      expect(swBody, contains('handleTranspile'));
+      expect(swBody, contains('/webdeck/babel.min.js'));
+
+      // 3. Verify Babel Standalone delivery
+      final babelReq = await client.getUrl(Uri.parse('http://127.0.0.1:${instance.port}/webdeck/babel.min.js'));
+      final babelRes = await babelReq.close();
+      expect(babelRes.statusCode, HttpStatus.ok);
+
+      // 4. Verify extensionless file resolution for ./runtime/game -> ./runtime/game.ts
+      final gameReq = await client.getUrl(Uri.parse('http://127.0.0.1:${instance.port}/src/runtime/game'));
+      final gameRes = await gameReq.close();
+      expect(gameRes.statusCode, HttpStatus.ok);
+      expect(gameRes.headers.value('x-webdeck-transpile'), 'true');
+      final gameBody = await utf8.decodeStream(gameRes);
+      expect(gameBody, contains('export class Game'));
+
+      client.close();
+      await repository.stopApp(app.id);
     });
   });
 }

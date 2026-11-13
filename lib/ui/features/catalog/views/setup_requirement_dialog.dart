@@ -121,6 +121,14 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
         Process.run('explorer.exe', [openPath]);
       } else if (Platform.isLinux) {
         Process.run('xdg-open', [openPath]);
+      } else if (Platform.isAndroid) {
+        Clipboard.setData(ClipboardData(text: openPath));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('App folder path copied to clipboard:\n$openPath'),
+            backgroundColor: WebDeckTheme.accentGreen,
+          ),
+        );
       }
     } catch (_) {}
   }
@@ -169,6 +177,24 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
     });
 
     try {
+      // On mobile / Android, check if the companion port is already reachable (e.g. over ADB reverse or LAN)
+      if (Platform.isAndroid) {
+        final ports = _requiredPorts;
+        if (ports.isNotEmpty) {
+          setState(() {
+            _statusMessage =
+                'Checking if port(s) ${ports.join(", ")} are reachable (ADB / LAN)...';
+          });
+          final isListening = await _waitForPorts(attempts: 4);
+          if (isListening) {
+            if (!mounted) return;
+            Navigator.of(context).pop();
+            widget.onProceedToLaunch();
+            return;
+          }
+        }
+      }
+
       await widget.viewModel.startCompanionBackend(
         widget.app,
         requirement: widget.requirement,
@@ -222,11 +248,20 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
     } catch (e) {
       if (!mounted) return;
       final logs = widget.viewModel.getCompanionLogs(widget.app.id);
+      final ports = _requiredPorts;
       setState(() {
         _isStarting = false;
         _statusMessage = null;
-        _errorMessage =
-            'Could not start backend: $e\nEnsure .NET SDK, Node/npm, and/or Python 3 are installed.';
+        if (Platform.isAndroid) {
+          final portHint = ports.isNotEmpty ? 'adb reverse tcp:${ports.first} tcp:${ports.first}' : '';
+          _errorMessage =
+              'Companion server (Python/Node/.NET) cannot run natively on Android.\n\n'
+              'If connected to PC via ADB, run:\n$portHint\n\n'
+              'Or start the script on your PC/Termux, then click "Launch Anyway".';
+        } else {
+          _errorMessage =
+              'Could not start backend: $e\nEnsure .NET SDK, Node/npm, and/or Python 3 are installed.';
+        }
         _processLogs = logs;
         _showLogs = true;
       });
@@ -254,6 +289,14 @@ class _SetupRequirementDialogState extends State<SetupRequirementDialog> {
         await Process.start('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', cmd]);
       } else if (Platform.isLinux) {
         await Process.start('x-terminal-emulator', ['-e', 'bash -c "$cmd; exec bash"']);
+      } else if (Platform.isAndroid) {
+        Clipboard.setData(ClipboardData(text: cmd));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Command copied! Run it on your connected PC or in Termux.'),
+            backgroundColor: WebDeckTheme.accentGreen,
+          ),
+        );
       }
 
       final ports = _requiredPorts;

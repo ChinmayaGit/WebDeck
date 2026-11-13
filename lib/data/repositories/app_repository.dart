@@ -66,9 +66,26 @@ class AppRepository {
   Future<void> stopCompanionBackend(String appId) =>
       _serverService.stopCompanionBackend(appId);
 
-  /// True when a previously saved backend path was a dependency false positive
-  /// (e.g. Vite's `node_modules/.../server.js`).
-  bool _isStaleBackendRequirement(BackendRequirement req) {
+  /// True when a previously saved backend requirement was a false positive or is now satisfied by a compiled build
+  bool _isStaleBackendRequirement(BackendRequirement req, Directory appDir) {
+    // 1. False positive database without companion script or real file
+    if (req.hasDatabase) {
+      final hasCompanion = req.requiresPython || req.requiresNode || req.requiresDotnet;
+      if (!hasCompanion && (req.databasePath == 'SQLite' || req.databasePath == 'SQL Server' || req.databasePath == null)) {
+        return true;
+      }
+    }
+
+    // 2. Requires Vite dev, but precompiled static output now exists
+    if (req.requiresViteDev) {
+      final dist1 = File(p.join(appDir.path, 'dist', 'index.html'));
+      final dist2 = File(p.join(appDir.path, req.viteProjectDir ?? '', 'dist', 'index.html'));
+      final dist3 = File(p.join(appDir.path, 'build', 'web', 'index.html'));
+      if (dist1.existsSync() || dist2.existsSync() || dist3.existsSync()) {
+        return true;
+      }
+    }
+
     final scripts = [
       req.pythonScript,
       req.nodeScript,
@@ -90,22 +107,21 @@ class AppRepository {
 
   /// Checks if an app has or needs backend requirements detection
   Future<BackendRequirement?> resolveBackendRequirement(InstalledApp app) async {
+    final targetDir = Directory(app.installedPath);
+    if (!await targetDir.exists()) return null;
+
     final existing = app.backendRequirement;
     if (existing != null &&
         existing.hasRequirements &&
-        !_isStaleBackendRequirement(existing)) {
+        !_isStaleBackendRequirement(existing, targetDir)) {
       return existing;
     }
-    final targetDir = Directory(app.installedPath);
-    if (await targetDir.exists()) {
-      final entities = await targetDir.list(recursive: true).toList();
-      final req = await _extractorService.detectBackendRequirements(targetDir, entities);
-      // Persist cleared or corrected detection so stale node_modules hits don't stick.
-      final updated = app.copyWith(backendRequirement: req);
-      await _storageService.saveOrUpdateApp(updated);
-      return req;
-    }
-    return null;
+    final entities = await targetDir.list(recursive: true).toList();
+    final req = await _extractorService.detectBackendRequirements(targetDir, entities);
+    // Persist cleared or corrected detection so stale node_modules/sqlite hits don't stick.
+    final updated = app.copyWith(backendRequirement: req);
+    await _storageService.saveOrUpdateApp(updated);
+    return req;
   }
 
   Future<void> uninstallApp(String appId) async {

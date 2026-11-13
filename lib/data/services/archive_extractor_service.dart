@@ -377,13 +377,15 @@ class ArchiveExtractorService {
 
       try {
         final content = await entity.readAsString();
-        if (content.contains('sqlite3') ||
-            content.contains('SQLite') ||
-            content.contains('sqlite')) {
-          usesSqlite = true;
-        }
-        if (sqlServerHints.hasMatch(content)) {
-          usesSqlServer = true;
+        if (isCompanionScript || isCsFile || isAppSettings) {
+          if (content.contains('sqlite3') ||
+              content.contains('SQLite') ||
+              content.contains('sqlite')) {
+            usesSqlite = true;
+          }
+          if (sqlServerHints.hasMatch(content)) {
+            usesSqlServer = true;
+          }
         }
 
         if (isAppSettings && connectionString == null) {
@@ -402,6 +404,7 @@ class ArchiveExtractorService {
         }
 
         if (name == 'index.html' &&
+            !hasCompiledWebRoot &&
             (content.contains('/src/main.') ||
                 RegExp(r'''src=["']/src/[^"']+\.(tsx?|jsx?)["']''').hasMatch(content))) {
           requiresViteDev = true;
@@ -495,14 +498,16 @@ class ArchiveExtractorService {
       openApiUrl ??= 'http://127.0.0.1:$detectedPort/openapi/v1.json';
     }
 
-    if (pythonScript == null &&
-        nodeScript == null &&
-        dotnetProject == null &&
-        !requiresViteDev &&
-        databasePath == null &&
-        detectedPort == null &&
-        !usesSqlite &&
-        !usesSqlServer) {
+    final hasRealDatabase = databasePath != null ||
+        ((usesSqlite || usesSqlServer) &&
+            (pythonScript != null || nodeScript != null || dotnetProject != null));
+
+    final hasCompanionServer = pythonScript != null ||
+        nodeScript != null ||
+        dotnetProject != null ||
+        hasRealDatabase;
+
+    if (!hasCompanionServer) {
       return null;
     }
 
@@ -551,12 +556,12 @@ class ArchiveExtractorService {
       requiresViteDev: requiresViteDev,
       viteProjectDir: viteProjectDir,
       viteDevPort: viteDevPort,
-      hasDatabase: databasePath != null || usesSqlite || usesSqlServer,
-      usesSqlServer: usesSqlServer,
+      hasDatabase: hasRealDatabase,
+      usesSqlServer: usesSqlServer && (dotnetProject != null || nodeScript != null || pythonScript != null),
       databasePath: databasePath ??
-          (usesSqlServer
-              ? 'SQL Server'
-              : (usesSqlite ? 'SQLite' : null)),
+          (hasRealDatabase
+              ? (usesSqlServer ? 'SQL Server' : 'SQLite')
+              : null),
       backendPort: detectedPort,
       apiCheckUrl: apiCheckUrl,
       openApiUrl: openApiUrl,

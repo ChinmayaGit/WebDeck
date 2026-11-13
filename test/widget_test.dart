@@ -200,7 +200,7 @@ void main() {
     expect(find.text('serve.py'), findsOneWidget);
     expect(find.text('Database'), findsOneWidget);
     expect(find.text('library.db'), findsOneWidget);
-    expect(find.text('Required Port'), findsOneWidget);
+    expect(find.text('API Port'), findsOneWidget);
     expect(find.text('http://127.0.0.1:8765'), findsOneWidget);
 
     // Verify command snippet

@@ -41,7 +41,6 @@ class BackendRequirement {
       requiresPython ||
       requiresNode ||
       requiresDotnet ||
-      requiresViteDev ||
       hasDatabase ||
       usesSqlServer ||
       backendPort != null;
