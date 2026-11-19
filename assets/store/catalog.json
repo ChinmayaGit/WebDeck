@@ -1,11 +1,169 @@
 {
+  "categories": [
+    {
+      "name": "PDF",
+      "icon": "pdf",
+      "color": "#DC2626"
+    },
+    {
+      "name": "Image",
+      "icon": "image",
+      "color": "#8B5CF6"
+    },
+    {
+      "name": "Video",
+      "icon": "movie",
+      "color": "#EC4899"
+    },
+    {
+      "name": "Audio",
+      "icon": "music",
+      "color": "#14B8A6"
+    },
+    {
+      "name": "Documents",
+      "icon": "doc",
+      "color": "#0EA5E9"
+    },
+    {
+      "name": "Books",
+      "icon": "book",
+      "color": "#B45309"
+    },
+    {
+      "name": "Downloaders",
+      "icon": "download",
+      "color": "#EF4444"
+    },
+    {
+      "name": "Media",
+      "icon": "tv",
+      "color": "#E11D48"
+    },
+    {
+      "name": "Network",
+      "icon": "share",
+      "color": "#2563EB"
+    },
+    {
+      "name": "Trackers",
+      "icon": "chart",
+      "color": "#10B981"
+    },
+    {
+      "name": "Health",
+      "icon": "heart",
+      "color": "#10B981"
+    },
+    {
+      "name": "Developer",
+      "icon": "code",
+      "color": "#64748B"
+    },
+    {
+      "name": "Archive",
+      "icon": "folder",
+      "color": "#A16207"
+    },
+    {
+      "name": "Business",
+      "icon": "invoice",
+      "color": "#16A34A"
+    },
+    {
+      "name": "3D",
+      "icon": "cube",
+      "color": "#0891B2"
+    },
+    {
+      "name": "Games",
+      "icon": "flash",
+      "color": "#DC2626"
+    }
+  ],
   "apps": [
+    "pdf-toolkit",
+    "image-converter",
+    "video-toolkit",
+    "audio-converter",
+    "doc-converter",
     "media-downloader",
     "price-tracker",
     "free-games",
     "ticket-watcher",
-    "image-converter",
-    "doc-converter"
+    "developer-toolkit",
+    "zip-tool",
+    "invoice-generator",
+    "model-converter",
+    "game-prices",
+    "books",
+    "music",
+    "video-player",
+    "iptv",
+    "flash-player",
+    "api-client",
+    "terminal",
+    "workout",
+    "health",
+    "file-transfer",
+    "nearby-share",
+    "messages",
+    "clipboard-sync"
   ],
-  "featured": ["media-downloader", "price-tracker", "free-games"]
+  "featured": [
+    "pdf-toolkit",
+    "nearby-share",
+    "video-toolkit",
+    "media-downloader",
+    "books",
+    "music",
+    "iptv",
+    "clipboard-sync",
+    "workout",
+    "price-tracker"
+  ],
+  "upcoming": [
+    {
+      "name": "Database Studio",
+      "category": "Developer",
+      "icon": "database",
+      "color": "#0EA5E9",
+      "description": "SQLite, PostgreSQL, MySQL, MongoDB and PocketBase in one app, and it opens the databases of repos you install."
+    },
+    {
+      "name": "Torrent Downloader",
+      "category": "Downloaders",
+      "icon": "download",
+      "color": "#22C55E",
+      "description": "Download legal torrents (Linux ISOs, public-domain media) and play while downloading."
+    },
+    {
+      "name": "Voice & Video Calls",
+      "category": "Network",
+      "icon": "call",
+      "color": "#16A34A",
+      "description": "Call your own devices over Wi-Fi, peer to peer with Device Link."
+    },
+    {
+      "name": "Screen Share",
+      "category": "Network",
+      "icon": "share",
+      "color": "#2563EB",
+      "description": "Show your screen on another of your devices."
+    },
+    {
+      "name": "OCR Scanner",
+      "category": "Documents",
+      "icon": "text",
+      "color": "#0EA5E9",
+      "description": "Turn photos and scanned PDFs into searchable, copyable text, offline."
+    },
+    {
+      "name": "Font Converter",
+      "category": "Developer",
+      "icon": "text",
+      "color": "#64748B",
+      "description": "Convert TTF/OTF \u21c4 WOFF2 for the web."
+    }
+  ]
 }

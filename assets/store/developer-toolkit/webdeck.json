@@ -1,0 +1,11 @@
+{
+  "id": "developer-toolkit",
+  "name": "Developer Toolkit",
+  "version": "1.0.0",
+  "description": "30+ everyday developer utilities, offline: JSON/XML/HTML/CSS/JS formatters, Base64, URL encoding, JWT decode/verify/sign, hashes (MD5, SHA), UUIDs, passwords, QR codes, regex tester, timestamps, time zones, number bases, colors, text case, word count, cron explainer and CSS generators.",
+  "category": "Developer",
+  "icon": "code",
+  "color": "#64748B",
+  "permissions": ["files"],
+  "author": "WebDeck"
+}

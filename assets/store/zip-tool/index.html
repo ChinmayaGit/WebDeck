@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZIP Tool</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">🗜️</div>
+      <div><h1>ZIP Tool</h1><div class="wd-sub">Create and extract ZIP archives offline</div></div>
+      <div class="wd-spacer"></div>
+      <div class="wd-tabs"><button class="wd-tab" data-tab="create" aria-selected="true">Create ZIP</button><button class="wd-tab" data-tab="extract" aria-selected="false">Extract ZIP</button></div>
+    </div>
+    <div id="create" class="wd-stack">
+      <div class="wd-card wd-stack">
+        <div class="wd-row"><button class="wd-btn wd-btn-primary" id="add">Add files</button><span class="wd-muted wd-small" id="sum"></span><div class="wd-spacer"></div><button class="wd-btn wd-btn-sm wd-btn-ghost" id="clear">Clear</button></div>
+        <div class="wd-list" id="files"></div>
+      </div>
+      <div class="wd-card wd-row">
+        <div class="wd-grow"><label class="wd-label">Archive name</label><input class="wd-input" id="name" value="archive"></div>
+        <div><label class="wd-label">Compression</label><select class="wd-select" id="level"><option value="0">Store (fastest)</option><option value="6" selected>Normal</option><option value="9">Maximum</option></select></div>
+        <button class="wd-btn wd-btn-primary" id="zip" style="align-self:end" disabled>Create ZIP</button>
+      </div>
+      <div id="zipResult"></div>
+    </div>
+    <div id="extract" class="wd-stack" hidden>
+      <div class="wd-card wd-row"><button class="wd-btn wd-btn-primary" id="open">Open a ZIP</button><span class="wd-muted wd-small wd-grow" id="zipInfo"></span><button class="wd-btn" id="all" disabled>Extract all</button></div>
+      <div id="extractResult"></div>
+      <div class="wd-card" id="entriesCard" hidden><table class="wd-table"><thead><tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr></thead><tbody id="entries"></tbody></table></div>
+    </div>
+  </div>
+  <script src="/__webdeck/vendor/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

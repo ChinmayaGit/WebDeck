@@ -1,0 +1,11 @@
+{
+  "id": "workout",
+  "name": "Workout",
+  "version": "1.0.0",
+  "description": "Gym log with 1,300+ exercises and animated demos: browse by muscle and equipment, log sets (kg × reps), rest timer, routines, personal records, weekly stats and full workout history. Based on the Reclaim workout tracker.",
+  "category": "Health",
+  "icon": "fitness",
+  "color": "#F97316",
+  "permissions": ["net", "notify"],
+  "author": "WebDeck"
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Price Tracker</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .games { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .game { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
+    .game:hover { border-color: #484f58; }
+    .game img { width: 100%; aspect-ratio: 231/87; object-fit: cover; background: var(--wd-surface-2); display: block; }
+    .game .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .price { font-weight: 800; font-size: 17px; }
+    .old { text-decoration: line-through; color: var(--wd-muted); font-size: 12px; }
+    .off { background: var(--wd-green); color: #04260f; font-weight: 800; font-size: 12px; padding: 2px 6px; border-radius: 6px; }
+    .store-ico { width: 16px; height: 16px; vertical-align: -3px; margin-right: 4px; }
+    .deals td { vertical-align: middle; }
+    .low { color: var(--wd-green); font-weight: 700; }
+    #chart text { fill: var(--wd-muted); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1100px">
+    <div class="wd-header">
+      <div class="wd-icon">🎮</div>
+      <div><h1>Game Price Tracker</h1><div class="wd-sub">Best prices across 30+ PC stores · USD</div></div>
+      <div class="wd-spacer"></div>
+      <div class="wd-tabs"><button class="wd-tab" data-tab="deals" aria-selected="true">Deals</button><button class="wd-tab" data-tab="search" aria-selected="false">Search</button><button class="wd-tab" data-tab="watch" aria-selected="false">Watchlist</button></div>
+    </div>
+    <section id="deals">
+      <div class="wd-row" style="margin-bottom:12px">
+        <select class="wd-select" id="dStore" style="width:auto"><option value="">All stores</option></select>
+        <select class="wd-select" id="dMax" style="width:auto"><option value="">Any price</option><option value="0">Free</option><option value="5">Under $5</option><option value="10">Under $10</option><option value="20">Under $20</option></select>
+        <select class="wd-select" id="dSort" style="width:auto"><option>Deal Rating</option><option>Savings</option><option>Price</option><option>Metacritic</option><option value="Recent">Newest deals</option></select>
+        <label class="wd-row wd-small"><input type="checkbox" id="dAAA"> Big titles only</label>
+      </div>
+      <div class="games" id="dealList"></div>
+    </section>
+    <section id="search" hidden>
+      <form id="sForm" class="wd-row" style="margin-bottom:12px"><input class="wd-input wd-grow" id="sq" placeholder="Search a game, e.g. Hades, Elden Ring, Stardew…"><button class="wd-btn wd-btn-primary">Search</button></form>
+      <div class="games" id="searchList"></div>
+    </section>
+    <section id="watch" hidden>
+      <div class="wd-row" style="margin-bottom:12px"><span class="wd-muted wd-small wd-grow" id="wSub"></span><button class="wd-btn" id="checkAll">Check prices now</button></div>
+      <div class="wd-list" id="watchList"></div>
+    </section>
+  </div>
+  <dialog class="wd-dialog" id="detail" style="width:min(780px, calc(100vw - 32px))"></dialog>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "id": "video-player",
+  "name": "Video Player",
+  "version": "1.0.0",
+  "description": "Play your videos with a library that remembers where you stopped. Folders, playback speed, subtitles (SRT/VTT), picture-in-picture, keyboard shortcuts, and any MP4 or HLS (.m3u8) link.",
+  "category": "Media",
+  "icon": "video",
+  "color": "#2563EB",
+  "permissions": ["files"],
+  "author": "WebDeck"
+}

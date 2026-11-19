@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nearby Share</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>.dev{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}.dev button{width:100%;padding:16px;border-radius:12px;background:var(--wd-surface);border:1px solid var(--wd-border);color:var(--wd-text);cursor:pointer;font:inherit;text-align:center}.dev button:hover{border-color:var(--wd-accent)}.dev .ic{font-size:30px;display:block}.dev .off{opacity:.5}</style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:960px">
+    <div class="wd-header"><div class="wd-icon">📤</div><div><h1>Nearby Share</h1><div class="wd-sub">Device Link · your devices on this Wi-Fi</div></div></div>
+    <div id="setup" style="margin-bottom:14px"></div>
+    <div id="main"></div>
+  </div>
+  <script src="linkkit.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "id": "api-client",
+  "name": "API Client",
+  "version": "1.0.0",
+  "description": "A Postman-style HTTP client: build requests with params, headers, JSON/form bodies and auth; save them in collections; switch environments with {{variables}}; browse history; import and export cURL. Works with localhost and LAN APIs, perfect for testing the web apps you run in WebDeck.",
+  "category": "Developer",
+  "icon": "api",
+  "color": "#F97316",
+  "permissions": ["net", "localnet"],
+  "author": "WebDeck"
+}

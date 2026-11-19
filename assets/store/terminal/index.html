@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Terminal</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    html, body { height: 100%; }
+    body { display: flex; flex-direction: column; background: #0b0e14; }
+    .tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: #0d1117; border-bottom: 1px solid var(--wd-border); }
+    .tabs button { background: transparent; border: 0; color: var(--wd-muted); padding: 7px 14px; border-radius: 8px 8px 0 0; cursor: pointer; font: 12px var(--wd-mono); }
+    .tabs button[aria-selected="true"] { background: #0b0e14; color: var(--wd-text); }
+    #out { flex: 1; overflow: auto; padding: 12px 14px; font: 13px/1.45 var(--wd-mono); color: #d1d5db; white-space: pre-wrap; word-break: break-word; }
+    .cmd { color: #7ee787; } .cmd .cwd { color: #79c0ff; }
+    .err { color: #ff7b72; } .muted { color: #6e7681; }
+    .line { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid #161b22; font: 13px var(--wd-mono); }
+    .line .cwd { color: #79c0ff; white-space: nowrap; max-width: 40%; overflow: hidden; text-overflow: ellipsis; direction: rtl; }
+    #cmd { flex: 1; background: transparent; border: 0; outline: none; color: #e6edf3; font: inherit; }
+    .a30{color:#6e7681}.a31{color:#ff7b72}.a32{color:#7ee787}.a33{color:#e3b341}.a34{color:#79c0ff}.a35{color:#d2a8ff}.a36{color:#76e3ea}.a37{color:#e6edf3}.a1{font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="tabs" id="tabs"></div>
+  <div id="out"></div>
+  <div class="line"><span class="cwd" id="cwd"></span><span style="color:#7ee787">❯</span><input id="cmd" autocomplete="off" spellcheck="false" placeholder="Type a command and press Enter"><button class="wd-btn wd-btn-sm" id="stop" hidden>Stop (Ctrl+C)</button></div>
+  <script src="app.js"></script>
+</body>
+</html>

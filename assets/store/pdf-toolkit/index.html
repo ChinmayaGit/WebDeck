@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF Toolkit</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+    .thumb { background: var(--wd-surface-2); border: 1px solid var(--wd-border); border-radius: 10px; padding: 8px; text-align: center; }
+    .thumb.deleted { opacity: .35; }
+    .thumb canvas { max-width: 100%; height: 130px; object-fit: contain; background: #fff; border-radius: 4px; transition: transform .2s; }
+    .thumb .bar { display: flex; justify-content: center; gap: 2px; margin-top: 6px; }
+    .thumb .bar button { padding: 3px 6px; font-size: 12px; }
+    .sigpad { width: 100%; height: 180px; background: #fff; border-radius: 10px; touch-action: none; cursor: crosshair; display: block; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">📕</div>
+      <div><h1>PDF Toolkit</h1><div class="wd-sub">Everything runs offline, so your files never leave this computer</div></div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="folder">Open output folder</button>
+    </div>
+    <div class="wd-toolkit">
+      <nav class="wd-toollist" id="list"></nav>
+      <main class="wd-stack" id="main"></main>
+    </div>
+  </div>
+  <script src="/__webdeck/vendor/pdf-lib.min.js"></script>
+  <script src="/__webdeck/vendor/pdf.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

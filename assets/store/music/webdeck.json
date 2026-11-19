@@ -1,0 +1,11 @@
+{
+  "id": "music",
+  "name": "Music",
+  "version": "1.0.0",
+  "description": "A music player for your own MP3/M4A/FLAC/WAV/OGG collection, plus a free music library: search the Internet Archive's open audio collections (netlabels, live concerts, Creative Commons music) to stream or download. Queue, shuffle, repeat, favorites and media keys.",
+  "category": "Media",
+  "icon": "music",
+  "color": "#E11D48",
+  "permissions": ["net", "files"],
+  "author": "WebDeck"
+}

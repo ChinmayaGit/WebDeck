@@ -1,0 +1,11 @@
+{
+  "id": "invoice-generator",
+  "name": "Invoice Generator",
+  "version": "1.0.0",
+  "description": "Fill in a simple form and get a clean, professional PDF invoice with line items, tax and discount. Remembers your business details and numbers invoices automatically. Works offline.",
+  "category": "Business",
+  "icon": "invoice",
+  "color": "#16A34A",
+  "permissions": ["files"],
+  "author": "WebDeck"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "health",
+  "name": "Health Tracker",
+  "version": "1.0.0",
+  "description": "Track water, sleep, weight (with BMI), steps and mood each day, see 7/30/90-day trends, and get gentle reminders to drink water when you're behind. Private: everything stays on this computer.",
+  "category": "Health",
+  "icon": "heart",
+  "color": "#10B981",
+  "permissions": [
+    "notify",
+    "jobs",
+    "files"
+  ],
+  "jobs": [
+    {
+      "id": "water-reminder",
+      "title": "Water reminder",
+      "every": "1h"
+    }
+  ],
+  "author": "WebDeck"
+}

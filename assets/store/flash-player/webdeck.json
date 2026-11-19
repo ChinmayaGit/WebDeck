@@ -1,0 +1,20 @@
+{
+  "id": "flash-player",
+  "name": "Flash Player",
+  "version": "1.0.0",
+  "description": "Play classic Flash games and animations (.swf) safely with Ruffle, an open-source Flash emulator written in Rust and WebAssembly. Keeps a library of your SWF files. Ruffle (~29 MB) is downloaded from npm and verified during install.",
+  "category": "Games",
+  "icon": "flash",
+  "color": "#DC2626",
+  "permissions": ["net", "files"],
+  "resources": [
+    {
+      "url": "https://registry.npmjs.org/@ruffle-rs/ruffle/-/ruffle-0.7.1.tgz",
+      "sha256": "dc9e7407549a91accc41a14932b0b9d9a9d51a3742ce6f020888c8a76682b157",
+      "target": "ruffle",
+      "strip": "package/",
+      "include": "^package/((ruffle|core\\.ruffle\\.[0-9a-f]+)\\.js|[0-9a-f]+\\.wasm|LICENSE_[A-Z]+)$"
+    }
+  ],
+  "author": "WebDeck"
+}

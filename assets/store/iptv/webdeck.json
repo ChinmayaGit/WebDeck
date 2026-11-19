@@ -1,0 +1,11 @@
+{
+  "id": "iptv",
+  "name": "Live TV",
+  "version": "1.0.0",
+  "description": "Watch free, publicly available live TV channels from around the world (from the open iptv-org directory). WebDeck tests every stream and shows only channels that are live right now, by country or category, with favorites.",
+  "category": "Media",
+  "icon": "tv",
+  "color": "#0EA5E9",
+  "permissions": ["net"],
+  "author": "WebDeck"
+}

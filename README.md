@@ -21,7 +21,30 @@ Store apps are static web apps with a `webdeck.json` manifest. They have no back
 | `jobs` | Scheduled background checks run in a hidden WebView |
 | `tools` | Managed **yt-dlp**, **FFmpeg**, **Pandoc** (auto-installed on request) and LibreOffice |
 
-Built-in apps (`assets/store/`): **Media Downloader** (video + music), **Price Tracker** (with price history), **Free Games**, **Ticket Watcher**, **Image Converter** and **Doc Converter**. More can be added through remote catalogs in Settings → Store sources, with no WebDeck release needed.
+Built-in apps (`assets/store/`), grouped by Store category:
+
+| Category | Apps |
+| :--- | :--- |
+| PDF | **PDF Toolkit**: merge, split, extract/remove/reorder/rotate pages, page numbers, watermark, sign, images ⇄ PDF, compress scans, metadata |
+| Image | **Image Converter**: JPEG/PNG/WebP, resize, batch, HEIC input |
+| Video | **Video Toolkit**: 21 FFmpeg tools (convert, GIF/WebP, extract audio, compress / compress-to-size, trim, crop, resize, rotate, speed, reverse, loop, FPS, watermark, merge, music, frames, green screen, Reels maker) |
+| Audio | **Audio Converter**: MP3/WAV/OGG/AAC/M4A/FLAC/Opus, compress, trim, normalize, volume, speed, reverse, join |
+| Documents | **Office Converter**: Word/Excel/PowerPoint/ODF/Markdown/HTML/EPUB via Pandoc + LibreOffice |
+| Books | **Books**: one search across Project Gutenberg, Standard Ebooks, Open Library and the Internet Archive; EPUB/PDF/TXT reader |
+| Downloaders | **Media Downloader**: pick the exact video quality or audio stream (yt-dlp) |
+| Media | **Music** (library + free Internet Archive music), **Video Player** (resume, subtitles, PiP), **Live TV** (only channels live right now, from iptv-org) |
+| Network | **File Transfer** (FTP/FTPS, SFTP, WebDAV, SMB, S3 via rclone), **Nearby Share**, **Messages**, **Clipboard Sync** (Device Link) |
+| Trackers | **Price Tracker** (with price history), **Game Price Tracker** (30+ PC stores via CheapShark), **Free Games**, **Ticket Watcher** |
+| Health | **Workout** (1,300+ exercises with demos, sets, rest timer, PRs; based on Reclaim), **Health Tracker** (water, sleep, weight/BMI, steps, mood, reminders) |
+| Developer | **Developer Toolkit** (30+ utilities), **API Client** (Postman-style, localhost-capable), **Terminal** |
+| Archive | **ZIP Tool**: create and extract ZIPs |
+| Business | **Invoice Generator**: PDF invoices |
+| 3D | **3D Model Converter**: OBJ ⇄ STL |
+| Games | **Flash Player**: .swf via Ruffle (fetched at install) |
+
+**Device Link** (Settings → Device Link) connects WebDeck on your phone and computers on the same Wi-Fi: devices discover each other, pair once with a 6-digit code, and every message, file and clipboard update is signed with the shared secret. It is off by default.
+
+More can be added through remote catalogs in Settings → Store sources, with no WebDeck release needed.
 
 To build an app, see [docs/building-apps.md](docs/building-apps.md).
 

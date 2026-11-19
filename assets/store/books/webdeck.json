@@ -1,0 +1,11 @@
+{
+  "id": "books",
+  "name": "Books",
+  "version": "1.0.0",
+  "description": "Search free, legal libraries all at once (Project Gutenberg, Standard Ebooks, Open Library and the Internet Archive), download books, and read EPUB, PDF and text in a built-in reader that remembers your page. Add your own e-books too.",
+  "category": "Books",
+  "icon": "book",
+  "color": "#B45309",
+  "permissions": ["net", "files"],
+  "author": "WebDeck"
+}

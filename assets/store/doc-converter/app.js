@@ -10,9 +10,22 @@
   };
   // Target -> pandoc writer.
   const PANDOC_OUT = { docx: 'docx', odt: 'odt', rtf: 'rtf', html: 'html', md: 'gfm', txt: 'plain', epub: 'epub' };
-  // Formats only LibreOffice can read.
-  const OFFICE_ONLY = ['doc', 'xls', 'xlsx', 'ppt', 'pptx', 'odp', 'ods', 'pages', 'wpd', 'csv'];
-  const LO_TARGET = { pdf: 'pdf', docx: 'docx', odt: 'odt', rtf: 'rtf', html: 'html', txt: 'txt:Text' };
+  // What kind of document each extension is (decides which targets make sense).
+  const KIND = {
+    doc: 'text', docx: 'text', odt: 'text', rtf: 'text', wpd: 'text', pages: 'text',
+    xls: 'sheet', xlsx: 'sheet', ods: 'sheet', csv: 'sheet', tsv: 'sheet', numbers: 'sheet',
+    ppt: 'slides', pptx: 'slides', odp: 'slides', key: 'slides',
+  };
+  const TARGETS = {
+    text: ['pdf', 'docx', 'odt', 'rtf', 'html', 'md', 'txt', 'epub'],
+    sheet: ['pdf', 'xlsx', 'ods', 'csv', 'html'],
+    slides: ['pdf', 'pptx', 'odp'],
+    markup: ['pdf', 'docx', 'odt', 'rtf', 'html', 'md', 'txt', 'epub'],
+  };
+  const kindOf = (ext) => KIND[ext] || (PANDOC_IN[ext] ? 'markup' : 'text');
+  // LibreOffice export filters per target.
+  const LO_TARGET = { pdf: 'pdf', docx: 'docx', odt: 'odt', rtf: 'rtf', html: 'html', txt: 'txt:Text', xlsx: 'xlsx', ods: 'ods', csv: 'csv', pptx: 'pptx', odp: 'odp' };
+  const OFFICE_ONLY = ['doc', 'xls', 'xlsx', 'ppt', 'pptx', 'odp', 'ods', 'pages', 'wpd', 'csv', 'tsv', 'numbers', 'key'];
 
   let status = null;
   let files = [];
@@ -33,7 +46,7 @@
     $('toolList').innerHTML =
       row('pandoc', 'Markdown, Word, HTML, ODT, RTF, EPUB, text',
         status.pandoc.installed ? '<span class="wd-badge wd-badge-green">Ready</span>' : '<button class="wd-btn wd-btn-primary wd-btn-sm" data-install="pandoc">Install</button>') +
-      row('libreoffice', 'PDF output, legacy .doc, Excel and PowerPoint files',
+      row('libreoffice', 'PDF output, Word, Excel and PowerPoint files',
         status.libreoffice.installed ? '<span class="wd-badge wd-badge-green">Ready</span>' : '<button class="wd-btn wd-btn-sm" data-get="libreoffice">Get LibreOffice</button>');
     render();
   }
@@ -59,24 +72,29 @@
   /** Decides which program converts a file, or why it can't. */
   function plan(file, target) {
     const ext = file.ext;
+    const kind = kindOf(ext);
     const hasPandoc = status?.pandoc?.installed;
     const hasLO = status?.libreoffice?.installed;
     if (ext === target || (ext === 'htm' && target === 'html') || (ext === 'markdown' && target === 'md')) return { error: 'Already in this format' };
-    if (target === 'pdf') {
-      if (!hasLO) return { error: 'PDF output needs LibreOffice' };
-      if (['md', 'markdown', 'rst', 'org', 'tex', 'ipynb', 'epub'].includes(ext)) {
+    if (!TARGETS[kind].includes(target)) {
+      const label = { text: 'a text document', sheet: 'a spreadsheet', slides: 'a presentation', markup: 'this document' }[kind];
+      return { error: `${target.toUpperCase()} isn't available for ${label}` };
+    }
+    // Text-like sources Pandoc reads well → Pandoc (PDF goes via HTML + LibreOffice).
+    if (kind === 'markup' || (kind === 'text' && PANDOC_IN[ext] && !OFFICE_ONLY.includes(ext) && ['md', 'txt', 'epub'].includes(target))) {
+      if (target === 'pdf') {
+        if (!hasLO) return { error: 'PDF output needs LibreOffice' };
+        if (['html', 'htm'].includes(ext)) return { steps: ['lo'] };
         return hasPandoc ? { steps: ['pandoc-html', 'lo'] } : { error: 'Needs Pandoc and LibreOffice' };
       }
-      return { steps: ['lo'] };
+      if (hasPandoc && PANDOC_OUT[target]) return { steps: ['pandoc'] };
+      if (!hasPandoc && hasLO && LO_TARGET[target] && kind !== 'markup') return { steps: ['lo'] };
+      return { error: 'Needs Pandoc (install above)' };
     }
-    if (OFFICE_ONLY.includes(ext) || !PANDOC_IN[ext]) {
-      if (!hasLO) return { error: `.${ext} files need LibreOffice` };
-      if (!LO_TARGET[target]) return { error: `LibreOffice cannot write ${target.toUpperCase()}` };
-      return { steps: ['lo'] };
-    }
-    if (!PANDOC_OUT[target]) return { error: 'Unsupported target' };
-    if (!hasPandoc) return { error: 'Needs Pandoc (install above)' };
-    return { steps: ['pandoc'] };
+    // Office formats → LibreOffice (with Pandoc for targets LibreOffice can't write).
+    if (LO_TARGET[target]) return hasLO ? { steps: ['lo'] } : { error: 'Needs LibreOffice (see above)' };
+    if (PANDOC_IN[ext] && PANDOC_OUT[target]) return hasPandoc ? { steps: ['pandoc'] } : { error: 'Needs Pandoc (install above)' };
+    return { error: 'Unsupported conversion' };
   }
 
   async function runTool(tool, args, file) {
@@ -153,8 +171,8 @@
     const ready = files.filter((f) => f.state === 'ready' || f.state === 'failed');
     $('convert').disabled = !ready.length || files.some((f) => f.state === 'working');
     $('hint').textContent = target === 'pdf'
-      ? 'PDF uses LibreOffice. Markdown is first turned into HTML with Pandoc.'
-      : 'Converted files are saved to Downloads/WebDeck/Doc Converter.';
+      ? 'PDF uses LibreOffice. Markdown and e-books are first turned into HTML with Pandoc.'
+      : 'Converted files are saved to Downloads/WebDeck/Office Converter.';
     if (!files.length) {
       $('files').innerHTML = '<div class="wd-empty"><div class="wd-empty-icon">📂</div>Choose one or more documents to convert.</div>';
       return;

@@ -14,6 +14,14 @@
     .kind { font-size: 20px; width: 34px; text-align: center; }
     .setup-tool { display: flex; align-items: center; gap: 10px; }
     .setup-tool + .setup-tool { margin-top: 10px; }
+    .media-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+    .media-head img { width: 160px; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px; background: var(--wd-surface-2); flex: none; }
+    .choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+    .choice { border: 1px solid var(--wd-border); background: var(--wd-surface-2); border-radius: 10px; padding: 10px 12px; cursor: pointer; text-align: left; color: var(--wd-text); font: inherit; }
+    .choice b { display: block; font-size: 15px; }
+    .choice span { font-size: 12px; color: var(--wd-muted); }
+    .choice[aria-pressed="true"] { border-color: var(--wd-accent); background: rgba(56,139,253,.14); }
+    @media (max-width: 560px) { .media-head img { width: 110px; } }
   </style>
 </head>
 <body>
@@ -43,10 +51,10 @@
       </div>
       <form class="form" id="form">
         <input class="wd-input" id="url" placeholder="Paste a link, e.g. https://www.youtube.com/watch?v=…" autocomplete="off" required>
-        <button class="wd-btn wd-btn-primary" id="go" type="submit">Download</button>
+        <button class="wd-btn wd-btn-primary" id="go" type="submit">Get formats</button>
       </form>
       <div class="options">
-        <div data-for="video">
+        <div data-for="video" data-preset="1">
           <label class="wd-label" for="vq">Quality</label>
           <select class="wd-select" id="vq">
             <option value="best">Best available</option>
@@ -57,7 +65,7 @@
             <option value="480">480p</option>
           </select>
         </div>
-        <div data-for="video">
+        <div data-for="video" data-preset="1">
           <label class="wd-label" for="vc">Format</label>
           <select class="wd-select" id="vc">
             <option value="mp4" selected>MP4 (most compatible)</option>
@@ -65,7 +73,7 @@
             <option value="webm">WebM</option>
           </select>
         </div>
-        <div data-for="audio" hidden>
+        <div data-for="audio" data-preset="1" hidden>
           <label class="wd-label" for="af">Format</label>
           <select class="wd-select" id="af">
             <option value="mp3" selected>MP3</option>
@@ -75,7 +83,7 @@
             <option value="wav">WAV</option>
           </select>
         </div>
-        <div data-for="audio" hidden>
+        <div data-for="audio" data-preset="1" hidden>
           <label class="wd-label" for="aq">Bitrate</label>
           <select class="wd-select" id="aq">
             <option value="0" selected>Best (VBR)</option>
@@ -89,6 +97,8 @@
         <label class="wd-row wd-small" data-for="video"><input type="checkbox" id="subs"> Subtitles</label>
       </div>
     </div>
+
+    <div class="wd-card" id="picker" hidden style="margin-top:14px"></div>
 
     <div class="wd-row" style="margin:22px 0 10px">
       <h2>Downloads</h2>

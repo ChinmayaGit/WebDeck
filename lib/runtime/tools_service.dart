@@ -139,6 +139,13 @@ class ToolsService extends ChangeNotifier {
       homepage: 'https://pandoc.org',
     ),
     ToolSpec(
+      id: 'rclone',
+      name: 'rclone',
+      description: 'Connects to FTP, SFTP, WebDAV, SMB, S3 and 70+ storage services.',
+      binaries: ['rclone'],
+      homepage: 'https://rclone.org',
+    ),
+    ToolSpec(
       id: 'libreoffice',
       name: 'LibreOffice',
       description: 'Office ↔ PDF conversion. Install it yourself from libreoffice.org.',
@@ -285,6 +292,8 @@ class ToolsService extends ChangeNotifier {
           await _installFfmpeg(staging);
         case 'pandoc':
           await _installPandoc(staging);
+        case 'rclone':
+          await _installRclone(staging);
       }
 
       for (final bin in s.binaries) {
@@ -396,6 +405,13 @@ class ToolsService extends ChangeNotifier {
     }
   }
 
+  Future<void> _installRclone(Directory out) async {
+    final os = Platform.isMacOS ? 'osx' : Platform.isWindows ? 'windows' : 'linux';
+    final arch = _isArm64 ? 'arm64' : 'amd64';
+    final zip = await _download('rclone', 'https://downloads.rclone.org/rclone-current-$os-$arch.zip', label: 'rclone');
+    await _extractZip('rclone', zip, out, ['rclone']);
+  }
+
   Future<Uint8List> _download(String toolId, String url, {required String label}) async {
     _setInstall(toolId, 'Downloading $label…', 0);
     final res = await _http.send(http.Request('GET', Uri.parse(url)));
@@ -452,9 +468,22 @@ class ToolsService extends ChangeNotifier {
     'pandoc': ['--filter', '-F', '--lua-filter', '-L', '--pdf-engine', '--data-dir'],
     'ffmpeg': [],
     'libreoffice': ['-env:', '--accept', '--infilter'],
+    'rclone': ['--password-command', '--config', '--rc', '--rc-addr', '--bwlimit-file'],
+  };
+
+  /// rclone can also serve, mount or run remote control servers; apps only get file operations.
+  static const _rcloneCommands = {
+    'lsjson', 'lsf', 'copyto', 'copy', 'moveto', 'move', 'deletefile', 'delete', 'mkdir', 'rmdir',
+    'purge', 'obscure', 'about', 'size', 'version', 'cat', 'touch', 'link', 'md5sum', 'sha1sum',
   };
 
   static void validateArgs(String tool, List<String> args) {
+    if (tool == 'rclone') {
+      final command = args.firstWhere((a) => !a.startsWith('-'), orElse: () => '');
+      if (!_rcloneCommands.contains(command)) {
+        throw ArgumentError('rclone "$command" is not allowed for apps');
+      }
+    }
     final blocked = _blockedArgs[tool] ?? const [];
     for (final arg in args) {
       for (final b in blocked) {
@@ -463,6 +492,25 @@ class ToolsService extends ChangeNotifier {
         }
       }
     }
+  }
+
+  /// Runs an arbitrary command line through the user's shell (Terminal app; `shell` permission).
+  Future<ToolTask> runShell({
+    required String appId,
+    required String appName,
+    required String command,
+    required String cwd,
+  }) async {
+    final String exe;
+    final List<String> args;
+    if (Platform.isWindows) {
+      exe = 'cmd.exe';
+      args = ['/c', command];
+    } else {
+      exe = Platform.environment['SHELL'] ?? (Platform.isMacOS ? '/bin/zsh' : '/bin/bash');
+      args = ['-lc', command];
+    }
+    return _start(appId: appId, appName: appName, label: 'shell', bin: exe, args: args, cwd: cwd, trackFiles: false);
   }
 
   Future<ToolTask> run({
@@ -479,19 +527,35 @@ class ToolsService extends ChangeNotifier {
     if (bin == null) throw StateError('${s.name} is not installed');
 
     final finalArgs = [...args];
-    final env = Map<String, String>.from(Platform.environment);
     final extraDirs = <String>[];
     final ffmpeg = await resolve('ffmpeg');
     if (ffmpeg != null) extraDirs.add(p.dirname(ffmpeg));
     if (tool == 'yt-dlp' && ffmpeg != null) {
       finalArgs.insertAll(0, ['--ffmpeg-location', p.dirname(ffmpeg)]);
     }
+    return _start(appId: appId, appName: appName, label: tool, bin: bin, args: finalArgs, cwd: cwd, extraPath: extraDirs);
+  }
+
+  Future<ToolTask> _start({
+    required String appId,
+    required String appName,
+    required String label,
+    required String bin,
+    required List<String> args,
+    required String cwd,
+    List<String> extraPath = const [],
+    bool trackFiles = true,
+  }) async {
+    final env = Map<String, String>.from(Platform.environment);
     final sep = Platform.isWindows ? ';' : ':';
-    env['PATH'] = [...extraDirs, env['PATH'] ?? '', ..._systemDirs()].join(sep);
+    env['PATH'] = [...extraPath, env['PATH'] ?? '', ..._systemDirs()].join(sep);
     env['PYTHONIOENCODING'] = 'utf-8';
+    final finalArgs = args;
+    final tool = label;
+    final s = spec(tool) ?? ToolSpec(id: tool, name: tool, description: '', binaries: [tool], homepage: '');
 
     await Directory(cwd).create(recursive: true);
-    final before = await _snapshot(cwd);
+    final before = trackFiles ? await _snapshot(cwd) : const <String, int>{};
 
     final task = ToolTask(
       id: 't${++_taskCounter}-${DateTime.now().millisecondsSinceEpoch}',
@@ -555,7 +619,7 @@ class ToolsService extends ChangeNotifier {
         task.status = code == 0 ? ToolTaskStatus.done : ToolTaskStatus.failed;
         if (code != 0) task.error = '${s.name} exited with code $code';
       }
-      task.outputFiles = await _changedFiles(cwd, before);
+      if (trackFiles) task.outputFiles = await _changedFiles(cwd, before);
       task._process = null;
       notifyListeners();
     }());

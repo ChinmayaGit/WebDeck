@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live TV</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .screen { background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; position: relative; display: grid; place-items: center; color: #777; }
+    .screen video { width: 100%; height: 100%; position: absolute; inset: 0; }
+    .channels { max-height: calc(100vh - 210px); overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+    .ch { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+    .ch:hover { background: var(--wd-surface-2); }
+    .ch.on { background: rgba(14,165,233,.15); }
+    .ch img { width: 42px; height: 30px; object-fit: contain; background: #fff1; border-radius: 4px; flex: none; }
+    .live { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 3px #ef444433; flex: none; }
+    .star { background: none; border: 0; color: var(--wd-muted); cursor: pointer; font-size: 16px; }
+    .star.on { color: #f59e0b; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1300px">
+    <div class="wd-header">
+      <div class="wd-icon">📺</div>
+      <div><h1>Live TV</h1><div class="wd-sub" id="sub">Only channels that are live right now</div></div>
+      <div class="wd-spacer"></div>
+      <select class="wd-select" id="kind" style="width:auto"><option value="countries">By country</option><option value="categories">By category</option><option value="favs">Favorites</option></select>
+      <select class="wd-select" id="pick" style="width:auto;max-width:220px"></select>
+      <button class="wd-btn wd-btn-primary" id="scan">Find live channels</button>
+    </div>
+    <div class="layout">
+      <div>
+        <div class="screen" id="screen"><span id="screenMsg">Pick a channel</span><video id="video" controls playsinline hidden></video></div>
+        <div class="wd-row" style="margin-top:10px"><b id="nowTitle" class="wd-grow"></b><span class="wd-small wd-muted" id="nowMeta"></span></div>
+      </div>
+      <div class="wd-card">
+        <div class="wd-row" style="margin-bottom:8px"><input class="wd-input wd-grow" id="filter" placeholder="Filter channels…"><select class="wd-select" id="group" style="width:auto;max-width:130px"><option value="">All</option></select></div>
+        <div class="wd-small wd-muted" id="scanInfo" style="margin-bottom:6px"></div>
+        <div class="wd-progress" id="scanBar" hidden><div></div></div>
+        <div class="channels" id="list"></div>
+      </div>
+    </div>
+    <p class="wd-small wd-muted" style="margin-top:16px">Channels come from the public <a href="#" id="credit">iptv-org</a> directory of freely available streams. WebDeck does not host any streams.</p>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

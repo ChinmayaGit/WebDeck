@@ -1,0 +1,11 @@
+{
+  "id": "pdf-toolkit",
+  "name": "PDF Toolkit",
+  "version": "1.0.0",
+  "description": "Merge, split, extract, remove, rotate and reorder pages; add page numbers, watermarks and your signature; convert images to PDF and PDF pages to JPG/PNG; shrink scanned PDFs; edit document info. Runs fully offline, so your files never leave this computer.",
+  "category": "PDF",
+  "icon": "pdf",
+  "color": "#DC2626",
+  "permissions": ["files", "notify"],
+  "author": "WebDeck"
+}

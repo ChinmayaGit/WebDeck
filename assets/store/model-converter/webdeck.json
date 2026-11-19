@@ -1,0 +1,11 @@
+{
+  "id": "model-converter",
+  "name": "3D Model Converter",
+  "version": "1.0.0",
+  "description": "Convert 3D models between OBJ and STL (binary or ASCII) for 3D printing and modeling apps, with a quick model summary. Runs offline.",
+  "category": "3D",
+  "icon": "cube",
+  "color": "#0891B2",
+  "permissions": ["files"],
+  "author": "WebDeck"
+}

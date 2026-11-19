@@ -1,0 +1,11 @@
+{
+  "id": "zip-tool",
+  "name": "ZIP Tool",
+  "version": "1.0.0",
+  "description": "Create ZIP archives from any files, or open a ZIP to browse it and extract everything (or single files) with folders intact. Runs offline.",
+  "category": "Archive",
+  "icon": "folder",
+  "color": "#A16207",
+  "permissions": ["files"],
+  "author": "WebDeck"
+}

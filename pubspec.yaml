@@ -50,9 +50,11 @@ dependencies:
   webview_flutter_platform_interface: ^2.15.1
   crypto: ^3.0.6
 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  cross_file: ^0.3.5+5
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -78,6 +80,7 @@ flutter:
     - assets/images/
     - assets/vendor/
     - assets/runtime/
+    - assets/runtime/vendor/
     - assets/store/
     - assets/store/image-converter/
     - assets/store/free-games/
@@ -85,6 +88,27 @@ flutter:
     - assets/store/ticket-watcher/
     - assets/store/media-downloader/
     - assets/store/doc-converter/
+    - assets/store/pdf-toolkit/
+    - assets/store/video-toolkit/
+    - assets/store/audio-converter/
+    - assets/store/developer-toolkit/
+    - assets/store/zip-tool/
+    - assets/store/invoice-generator/
+    - assets/store/model-converter/
+    - assets/store/game-prices/
+    - assets/store/books/
+    - assets/store/music/
+    - assets/store/video-player/
+    - assets/store/iptv/
+    - assets/store/flash-player/
+    - assets/store/api-client/
+    - assets/store/terminal/
+    - assets/store/workout/
+    - assets/store/health/
+    - assets/store/file-transfer/
+    - assets/store/nearby-share/
+    - assets/store/messages/
+    - assets/store/clipboard-sync/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

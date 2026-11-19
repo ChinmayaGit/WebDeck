@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Player</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .vid { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 10px; overflow: hidden; cursor: pointer; }
+    .vid:hover { border-color: #484f58; }
+    .thumb { aspect-ratio: 16/9; background: #000 center/cover; display: grid; place-items: center; font-size: 34px; position: relative; }
+    .thumb .len { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 1px 5px; border-radius: 4px; }
+    .prog { height: 3px; background: #333; } .prog div { height: 100%; background: #ef4444; }
+    .vid .meta { padding: 8px 10px; }
+    #playerWrap { position: fixed; inset: 0; background: #000; z-index: 40; display: flex; flex-direction: column; }
+    #playerWrap[hidden] { display: none; }
+    #playerWrap .top { display: flex; gap: 8px; align-items: center; padding: 8px 12px; color: #fff; background: linear-gradient(#000c, #0000); position: absolute; top: 0; left: 0; right: 0; z-index: 2; transition: opacity .3s; }
+    #playerWrap.idle .top { opacity: 0; }
+    #playerWrap .top button, #playerWrap .top select { background: rgba(255,255,255,.12); border: 0; color: #fff; border-radius: 6px; padding: 6px 10px; cursor: pointer; font: 13px var(--wd-font); }
+    video { width: 100%; height: 100%; background: #000; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1200px">
+    <div class="wd-header">
+      <div class="wd-icon">🎞️</div>
+      <div><h1>Video Player</h1><div class="wd-sub" id="sub">Your videos, resumed where you left off</div></div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="addFolder">Add folder</button><button class="wd-btn" id="addFiles">Add videos</button>
+    </div>
+    <form class="wd-card wd-row" id="urlForm" style="margin-bottom:14px"><input class="wd-input wd-grow" id="url" placeholder="Or play a link: https://…/video.mp4 or …/stream.m3u8"><button class="wd-btn wd-btn-primary">Play link</button></form>
+    <div class="wd-row" style="margin-bottom:10px"><input class="wd-input" id="filter" placeholder="Filter…" style="max-width:260px"><div class="wd-spacer"></div>
+      <select class="wd-select" id="sort" style="width:auto"><option value="recent">Recently watched</option><option value="name">Name</option><option value="added">Recently added</option></select></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div id="playerWrap" hidden>
+    <div class="top">
+      <button id="back">← Back</button><b id="ptitle" class="wd-ellipsis" style="flex:1"></b>
+      <select id="speed" title="Speed"></select>
+      <button id="subs">Subtitles…</button><button id="pip">Picture-in-picture</button>
+    </div>
+    <video id="video" controls playsinline></video>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

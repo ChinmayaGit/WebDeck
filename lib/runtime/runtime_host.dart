@@ -15,6 +15,7 @@ import 'package:shelf/shelf.dart';
 import '../data/models/installed_app.dart';
 import 'app_data_store.dart';
 import 'job_scheduler.dart';
+import 'link_service.dart';
 import 'manifest.dart';
 import 'notification_service.dart';
 import 'settings_service.dart';
@@ -49,6 +50,9 @@ class RuntimeHost {
   final Future<Directory> Function() baseDir;
   final http.Client _http;
   late JobScheduler jobs;
+
+  /// Device Link (LAN pairing, files, messages, clipboard); null when unavailable.
+  LinkService? link;
 
   /// Hooks into the Flutter UI; replaced by the app at startup.
   ConfirmPrompt confirm = (_, _) async => false;
@@ -104,6 +108,17 @@ class RuntimeHost {
         }
         if (request.method == 'GET' && path == '__webdeck/ui.css') {
           return await _asset('assets/runtime/ui.css', 'text/css; charset=utf-8');
+        }
+        // Shared open-source libraries (pdf-lib, PDF.js, JSZip, …) so apps work offline
+        // without each bundling its own copy. See assets/runtime/vendor/LICENSES.md.
+        final vendor = RegExp(r'^__webdeck/vendor/([a-z0-9][a-z0-9._-]*\.js)$').firstMatch(path);
+        if (request.method == 'GET' && vendor != null) {
+          try {
+            return await _asset('assets/runtime/vendor/${vendor.group(1)}', 'application/javascript; charset=utf-8',
+                cache: true);
+          } catch (_) {
+            throw const RuntimeError('not_found', 'Unknown library', 404);
+          }
         }
 
         _checkSameOrigin(request);
@@ -170,11 +185,14 @@ class RuntimeHost {
         headers: {'Content-Type': 'application/json; charset=utf-8', ..._noCache},
       );
 
-  Future<Response> _asset(String key, String contentType) async {
+  Future<Response> _asset(String key, String contentType, {bool cache = false}) async {
     final data = await rootBundle.load(key);
     return Response.ok(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-      headers: {'Content-Type': contentType, ..._noCache},
+      headers: {
+        'Content-Type': contentType,
+        ...(cache ? {'Cache-Control': 'public, max-age=86400'} : _noCache),
+      },
     );
   }
 
@@ -241,7 +259,33 @@ class RuntimeHost {
       // ---- network
       case 'net.fetch':
         _require(manifest, RuntimePermission.net);
-        return _fetch(params);
+        return _fetch(params, allowLocal: manifest.has(RuntimePermission.localnet));
+      case 'net.download':
+        _require(manifest, RuntimePermission.net);
+        _require(manifest, RuntimePermission.files);
+        return _startDownload(app, params);
+      case 'downloads.get':
+        final d = _downloads[str('id')];
+        if (d == null || d.appId != app.id) throw const RuntimeError('not_found', 'Unknown download', 404);
+        return d.toJson();
+      case 'downloads.cancel':
+        final d = _downloads[str('id')];
+        if (d == null || d.appId != app.id) throw const RuntimeError('not_found', 'Unknown download', 404);
+        d.cancelled = true;
+        return true;
+
+      // ---- shell (Terminal)
+      case 'shell.run':
+        _require(manifest, RuntimePermission.shell);
+        final cwdParam = params['cwd'] as String?;
+        final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? (await baseDir()).path;
+        final cwd = cwdParam != null && cwdParam.isNotEmpty ? cwdParam : home;
+        if (!await Directory(cwd).exists()) throw RuntimeError('not_found', 'Folder not found: $cwd', 404);
+        final task = await tools.runShell(appId: app.id, appName: app.name, command: str('command'), cwd: cwd);
+        return task.toJson();
+      case 'shell.home':
+        _require(manifest, RuntimePermission.shell);
+        return Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? (await baseDir()).path;
 
       // ---- files
       case 'files.pick':
@@ -250,10 +294,22 @@ class RuntimeHost {
       case 'files.save':
         _require(manifest, RuntimePermission.files);
         return _save(app, params);
+      case 'files.pickFolder':
+        _require(manifest, RuntimePermission.files);
+        return _pickFolder(app, params);
+      case 'files.url':
+        _require(manifest, RuntimePermission.files);
+        final path = await _allowedPath(app, str('path'), manifest);
+        final st = await FileStat.stat(path);
+        return _register(app, path, p.basename(path), st.size);
+      case 'files.list':
+        _require(manifest, RuntimePermission.files);
+        final dirPath = await _allowedPath(app, str('path'));
+        return _listFiles(app, dirPath, params);
       case 'files.reveal':
       case 'files.open':
         _require(manifest, RuntimePermission.files);
-        final path = await _allowedPath(app, str('path'));
+        final path = await _allowedPath(app, str('path'), manifest);
         await _openPath(path, reveal: method == 'files.reveal');
         return true;
       case 'files.openFolder':
@@ -300,7 +356,11 @@ class RuntimeHost {
       case 'tools.run':
         _require(manifest, RuntimePermission.tools);
         final args = (params['args'] as List?)?.map((e) => e.toString()).toList() ?? const <String>[];
-        final cwd = (await downloadsDir(app)).path;
+        var cwd = (await downloadsDir(app)).path;
+        final subdir = params['subdir'];
+        if (subdir is String && subdir.trim().isNotEmpty) {
+          cwd = p.join(cwd, _safeFileName(subdir));
+        }
         final task = await tools.run(
           appId: app.id,
           appName: app.name,
@@ -310,15 +370,20 @@ class RuntimeHost {
         );
         return task.toJson();
       case 'tasks.get':
-        _require(manifest, RuntimePermission.tools);
+        if (!manifest.has(RuntimePermission.shell)) _require(manifest, RuntimePermission.tools);
         final task = tools.task(str('id'));
         if (task == null || task.appId != app.id) throw const RuntimeError('not_found', 'Unknown task', 404);
         return task.toJson(since: (params['since'] as num?)?.toInt() ?? 0);
       case 'tasks.cancel':
-        _require(manifest, RuntimePermission.tools);
+        if (!manifest.has(RuntimePermission.shell)) _require(manifest, RuntimePermission.tools);
         final task = tools.task(str('id'));
         if (task == null || task.appId != app.id) throw const RuntimeError('not_found', 'Unknown task', 404);
         return tools.cancel(task.id);
+
+      // ---- Device Link
+      case String m when m.startsWith('link.'):
+        _require(manifest, RuntimePermission.link);
+        return _linkCall(app, manifest, m, params);
 
       // ---- jobs
       case 'jobs.list':
@@ -348,6 +413,104 @@ class RuntimeHost {
     throw RuntimeError('not_found', 'Unknown method "$method"', 404);
   }
 
+  // ------------------------------------------------------------ device link
+
+  Future<Object?> _linkCall(InstalledApp app, WebDeckManifest manifest, String method, Map<String, dynamic> params) async {
+    final l = link;
+    if (l == null) throw const RuntimeError('unsupported', 'Device Link is not available on this platform');
+    String str(String k) {
+      final v = params[k];
+      if (v is! String || v.isEmpty) throw RuntimeError('bad_request', '"$k" is required');
+      return v;
+    }
+
+    try {
+      switch (method) {
+        case 'link.status':
+          return {
+            'enabled': l.enabled,
+            'running': l.running,
+            'deviceId': l.deviceId,
+            'deviceName': l.deviceName,
+            'port': l.port,
+            'clipboardSync': l.clipboardSync,
+            'addresses': await l.localAddresses(),
+            'error': l.lastError,
+          };
+        case 'link.enable':
+          final on = params['enabled'] == true;
+          if (on && !l.enabled) {
+            final ok = await confirm(
+              'Turn on Device Link?',
+              '"${app.name}" wants to turn on Device Link.\n\nWebDeck will become visible to other WebDeck devices on this '
+                  'network. Only devices you pair with a code can send you files, messages or clipboard text.',
+            );
+            if (!ok) throw const RuntimeError('cancelled', 'Device Link stays off');
+          }
+          await l.setEnabled(on);
+          return true;
+        case 'link.setName':
+          await l.setDeviceName(str('name'));
+          return true;
+        case 'link.peers':
+          return l.peers.map((p) => p.toJson()).toList();
+        case 'link.pairCode':
+          if (!l.running) throw const RuntimeError('link_off', 'Turn on Device Link first');
+          final c = l.newPairCode();
+          return {'code': c.code, 'expiresAt': c.expires.toIso8601String(), 'addresses': await l.localAddresses(), 'port': l.port};
+        case 'link.pair':
+          final peer = await l.pairWith(str('addr'), str('code'), peerPort: (params['port'] as num?)?.toInt());
+          return peer.toJson();
+        case 'link.unpair':
+          await l.unpair(str('id'));
+          return true;
+        case 'link.send':
+          final channel = str('channel');
+          if (channel == 'clipboard' || channel == 'files') throw const RuntimeError('bad_request', 'Use link.clipboard / link.sendFile');
+          final payload = (params['payload'] as Map?)?.cast<String, dynamic>() ?? {};
+          if (jsonEncode(payload).length > 256 * 1024) throw const RuntimeError('too_large', 'Message is too large');
+          return (await l.send(str('peer'), channel, payload)).toJson();
+        case 'link.sendFile':
+          final path = await _allowedPath(app, str('path'), manifest);
+          return (await l.sendFile(str('peer'), path)).toJson();
+        case 'link.inbox':
+          final since = (params['since'] as num?)?.toInt();
+          return l
+              .inbox(
+                channel: params['channel'] as String?,
+                peerId: params['peer'] as String?,
+                since: since == null ? null : DateTime.fromMillisecondsSinceEpoch(since),
+              )
+              .map((m) => m.toJson())
+              .toList();
+        case 'link.clearInbox':
+          await l.clearInbox(str('channel'));
+          return true;
+        case 'link.clipboard':
+          switch (params['action']) {
+            case 'history':
+              return l.clipboardHistory;
+            case 'setSync':
+              await l.setClipboardSync(params['enabled'] == true);
+              return true;
+            case 'share':
+              final text = str('text');
+              await l.copyToClipboard(text);
+              return await l.shareClipboard(text);
+            case 'copy':
+              await l.copyToClipboard(str('text'));
+              return true;
+          }
+          throw const RuntimeError('bad_request', 'Unknown clipboard action');
+        case 'link.receivedDir':
+          return (await l.receivedDir()).path;
+      }
+    } on LinkException catch (e) {
+      throw RuntimeError('link', e.message, 409);
+    }
+    throw RuntimeError('not_found', 'Unknown method "$method"', 404);
+  }
+
   // ---------------------------------------------------------------- network
 
   static bool _isWebUrl(String url) {
@@ -368,22 +531,25 @@ class RuntimeHost {
         h.startsWith('fe80:');
   }
 
-  Future<Map<String, dynamic>> _fetch(Map<String, dynamic> params) async {
+  Future<Map<String, dynamic>> _fetch(Map<String, dynamic> params, {bool allowLocal = false}) async {
     final url = params['url'];
     if (url is! String || !_isWebUrl(url)) {
       throw const RuntimeError('bad_request', '"url" must be an http(s) URL');
     }
     final uri = Uri.parse(url);
-    if (isBlockedHost(uri.host)) {
-      throw const RuntimeError('forbidden', 'Fetching local addresses is not allowed', 403);
+    if (isBlockedHost(uri.host) && !allowLocal) {
+      throw const RuntimeError('forbidden', 'Fetching local addresses needs the "localnet" permission', 403);
     }
     final method = (params['method'] as String? ?? 'GET').toUpperCase();
     final req = http.Request(method, uri)
       ..followRedirects = true
       ..maxRedirects = 8;
-    req.headers['User-Agent'] = _defaultUserAgent;
-    req.headers['Accept'] = 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8';
-    req.headers['Accept-Language'] = 'en-US,en;q=0.9';
+    if (params['rawHeaders'] != true) {
+      req.headers['User-Agent'] = _defaultUserAgent;
+      req.headers['Accept'] = 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8';
+      req.headers['Accept-Language'] = 'en-US,en;q=0.9';
+    }
+    if (params['followRedirects'] == false) req.followRedirects = false;
     final headers = (params['headers'] as Map?)?.cast<String, dynamic>() ?? {};
     headers.forEach((k, v) {
       if (v != null) req.headers[k] = v.toString();
@@ -406,8 +572,15 @@ class RuntimeHost {
     }
 
     final builder = BytesBuilder(copy: false);
+    // maxBytes lets callers peek at endless streams (e.g. live TV) without waiting for a timeout.
+    final maxBytes = (params['maxBytes'] as num?)?.toInt();
+    var truncated = false;
     await for (final chunk in res.stream.timeout(Duration(seconds: timeoutSec))) {
       builder.add(chunk);
+      if (maxBytes != null && builder.length >= maxBytes) {
+        truncated = true;
+        break;
+      }
       if (builder.length > _maxFetchBytes) {
         throw const RuntimeError('too_large', 'Response is larger than 20 MB', 413);
       }
@@ -421,7 +594,10 @@ class RuntimeHost {
 
     return {
       'status': res.statusCode,
+      'reason': res.reasonPhrase,
       'ok': res.statusCode >= 200 && res.statusCode < 300,
+      'size': bytes.length,
+      'truncated': truncated,
       'url': finalUrl,
       'headers': res.headers,
       if (asBase64) 'base64': base64Encode(bytes) else 'text': isLatin1 ? latin1.decode(bytes) : utf8.decode(bytes, allowMalformed: true),
@@ -462,7 +638,114 @@ class RuntimeHost {
       if (path == null) continue;
       out.add(_register(app, path, f.name, await File(path).length()));
     }
+    if (params['remember'] == true) await _addGrants(app.id, out.map((f) => f['path'] as String));
     return out;
+  }
+
+  // ---- remembered access: files/folders the user picked stay readable after restarts.
+  final Map<String, List<String>> _grantCache = {};
+
+  Future<File> _grantFile(String appId) async => File(p.join((await data.appDir(appId)).path, 'grants.json'));
+
+  Future<List<String>> _grants(String appId) async {
+    final cached = _grantCache[appId];
+    if (cached != null) return cached;
+    var list = <String>[];
+    try {
+      final f = await _grantFile(appId);
+      if (await f.exists()) list = (jsonDecode(await f.readAsString()) as List).cast<String>();
+    } catch (_) {}
+    return _grantCache[appId] = list;
+  }
+
+  Future<void> _addGrants(String appId, Iterable<String> paths) async {
+    final list = await _grants(appId);
+    for (final path in paths) {
+      final n = p.normalize(path);
+      if (!list.contains(n)) list.add(n);
+    }
+    await (await _grantFile(appId)).writeAsString(jsonEncode(list));
+  }
+
+  Future<Map<String, dynamic>?> _pickFolder(InstalledApp app, Map<String, dynamic> params) async {
+    final dir = await pickDirectory();
+    if (dir == null) return null;
+    await _addGrants(app.id, [dir]);
+    return {'path': dir, 'name': p.basename(dir), 'files': await _listFiles(app, dir, params)};
+  }
+
+  Future<List<Map<String, dynamic>>> _listFiles(InstalledApp app, String dirPath, Map<String, dynamic> params) async {
+    final exts = (params['extensions'] as List?)?.map((e) => e.toString().toLowerCase().replaceFirst('.', '')).toSet();
+    final recursive = params['recursive'] != false;
+    final out = <Map<String, dynamic>>[];
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) throw const RuntimeError('not_found', 'Folder not found', 404);
+    await for (final e in dir.list(recursive: recursive, followLinks: false)) {
+      if (e is! File) continue;
+      final name = p.basename(e.path);
+      if (name.startsWith('.')) continue;
+      final ext = p.extension(name).replaceFirst('.', '').toLowerCase();
+      if (exts != null && !exts.contains(ext)) continue;
+      out.add(_register(app, e.path, name, await e.length()));
+      if (out.length >= 5000) break;
+    }
+    out.sort((a, b) => (a['path'] as String).compareTo(b['path'] as String));
+    return out;
+  }
+
+  /// Overridable for tests.
+  Future<String?> Function() pickDirectory = () => FilePicker.getDirectoryPath();
+
+  // ---- streamed downloads (books, music, …) straight to disk.
+  final Map<String, _Download> _downloads = {};
+
+  Future<Map<String, dynamic>> _startDownload(InstalledApp app, Map<String, dynamic> params) async {
+    final url = params['url'];
+    if (url is! String || !_isWebUrl(url)) throw const RuntimeError('bad_request', '"url" must be an http(s) URL');
+    final uri = Uri.parse(url);
+    if (isBlockedHost(uri.host)) throw const RuntimeError('forbidden', 'Downloading from local addresses is not allowed', 403);
+    var dir = await downloadsDir(app);
+    final sub = params['subdir'] as String?;
+    if (sub != null && sub.trim().isNotEmpty) {
+      final segments = sub.replaceAll('\\', '/').split('/').where((x) => x.trim().isNotEmpty).map(_safeFileName);
+      dir = Directory(p.joinAll([dir.path, ...segments]));
+      await dir.create(recursive: true);
+    }
+    final rawName = (params['name'] as String?)?.trim();
+    final name = _safeFileName(rawName != null && rawName.isNotEmpty ? rawName : Uri.decodeComponent(uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'download'));
+    var target = File(p.join(dir.path, name));
+    final stem = p.basenameWithoutExtension(name), ext = p.extension(name);
+    for (var i = 2; await target.exists(); i++) {
+      target = File(p.join(dir.path, '$stem ($i)$ext'));
+    }
+    final d = _Download(_newId(), app.id, url, target.path);
+    _downloads[d.id] = d;
+    unawaited(() async {
+      final part = File('${target.path}.part');
+      try {
+        final req = http.Request('GET', uri)..headers['User-Agent'] = _defaultUserAgent;
+        final res = await _http.send(req).timeout(const Duration(seconds: 60));
+        if (res.statusCode != 200) throw RuntimeError('http', 'Server returned HTTP ${res.statusCode}', 502);
+        d.total = res.contentLength;
+        final sink = part.openWrite();
+        try {
+          await for (final chunk in res.stream) {
+            if (d.cancelled) throw const RuntimeError('cancelled', 'Cancelled');
+            sink.add(chunk);
+            d.received += chunk.length;
+          }
+        } finally {
+          await sink.close();
+        }
+        await part.rename(target.path);
+        d.status = 'done';
+      } catch (e) {
+        d.status = d.cancelled ? 'cancelled' : 'failed';
+        d.error = e is RuntimeError ? e.message : '$e';
+        if (await part.exists()) await part.delete();
+      }
+    }());
+    return d.toJson();
   }
 
   Future<Map<String, dynamic>> _upload(InstalledApp app, Request request) async {
@@ -526,7 +809,10 @@ class RuntimeHost {
     var dir = await downloadsDir(app);
     final sub = params['subdir'] as String?;
     if (sub != null && sub.isNotEmpty) {
-      dir = Directory(p.join(dir.path, _safeFileName(sub)));
+      // Nested folders are allowed ("Album/Disc 1"); every segment is sanitized,
+      // so ".." or absolute paths can't escape the app's folder.
+      final segments = sub.replaceAll('\\', '/').split('/').where((s) => s.trim().isNotEmpty).map(_safeFileName);
+      dir = Directory(p.joinAll([dir.path, ...segments]));
       await dir.create(recursive: true);
     }
     var target = File(p.join(dir.path, name));
@@ -539,11 +825,18 @@ class RuntimeHost {
   }
 
   /// Apps may only open/reveal files in their downloads folder or files the user picked.
-  Future<String> _allowedPath(InstalledApp app, String path) async {
+  Future<String> _allowedPath(InstalledApp app, String path, [WebDeckManifest? manifest]) async {
     final normalized = p.normalize(p.absolute(path));
     final downloads = p.normalize((await downloadsDir(app)).path);
+    // Apps with Device Link may open files that were received from paired devices.
+    if (manifest != null && manifest.has(RuntimePermission.link) && link != null) {
+      final received = p.normalize((await link!.receivedDir()).path);
+      final inside = p.isWithin(received, normalized) || p.equals(received, normalized);
+      if (inside && (await File(normalized).exists() || await Directory(normalized).exists())) return normalized;
+    }
     final picked = _picked[app.id]?.values.any((f) => p.equals(f.path, normalized)) ?? false;
-    if (!picked && !p.isWithin(downloads, normalized) && !p.equals(downloads, normalized)) {
+    final granted = (await _grants(app.id)).any((g) => p.equals(g, normalized) || p.isWithin(g, normalized));
+    if (!picked && !granted && !p.isWithin(downloads, normalized) && !p.equals(downloads, normalized)) {
       throw const RuntimeError('forbidden', 'Path is outside this app\'s files', 403);
     }
     if (!await File(normalized).exists() && !await Directory(normalized).exists()) {
@@ -587,4 +880,29 @@ class RuntimeHost {
   }
 
   void dispose() => _http.close();
+}
+
+class _Download {
+  final String id;
+  final String appId;
+  final String url;
+  final String path;
+  int received = 0;
+  int? total;
+  String status = 'running';
+  String? error;
+  bool cancelled = false;
+
+  _Download(this.id, this.appId, this.url, this.path);
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'url': url,
+        'path': path,
+        'name': p.basename(path),
+        'received': received,
+        'total': total,
+        'status': status,
+        'error': error,
+      };
 }

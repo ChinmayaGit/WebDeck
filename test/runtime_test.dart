@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -195,6 +197,9 @@ void main() {
       expect(p.basename(path), 'evil.txt');
       expect(p.isWithin(tmp.path, path), isTrue);
       expect(await File(path).readAsString(), 'hi');
+      final nested = await h.call(a, m, 'files.save', {'name': 'x.txt', 'text': '1', 'subdir': '../../a/../b/c'}) as Map;
+      expect(p.isWithin(tmp.path, nested['path'] as String), isTrue);
+      expect(nested['path'], endsWith(p.join('b', 'c', 'x.txt')));
       final second = await h.call(a, m, 'files.save', {'name': 'evil.txt', 'text': 'again'}) as Map;
       expect(second['name'], 'evil (2).txt');
 
@@ -230,6 +235,88 @@ void main() {
     });
   });
 
+  group('runtime additions', () {
+    test('localnet permission unlocks loopback fetches', () async {
+      final h = host();
+      final plain = manifest(perms: {'net'});
+      expect(
+        () => h.call(app(plain), plain, 'net.fetch', {'url': 'http://127.0.0.1:9/'}),
+        throwsA(isA<RuntimeError>().having((e) => e.code, 'code', 'forbidden')),
+      );
+      final local = manifest(perms: {'net', 'localnet'});
+      // Gets past the permission check (flutter_test's mock HTTP client then answers 400).
+      try {
+        final r = await h.call(app(local), local, 'net.fetch', {'url': 'http://127.0.0.1:9/', 'timeout': 2});
+        expect(r, isA<Map>());
+      } on RuntimeError catch (e) {
+        expect(e.code, isNot('forbidden'));
+      }
+    });
+
+    test('shell.run needs the shell permission and runs commands', () async {
+      final h = host();
+      final m = manifest();
+      expect(
+        () => h.call(app(m), m, 'shell.run', {'command': 'echo hi'}),
+        throwsA(isA<RuntimeError>().having((e) => e.code, 'code', 'permission_denied')),
+      );
+      final sh = manifest(perms: {'shell'});
+      final task = await h.call(app(sh), sh, 'shell.run', {'command': 'echo webdeck-ok', 'cwd': tmp.path}) as Map;
+      Map result = task;
+      for (var i = 0; i < 50 && result['status'] == 'running'; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        result = await h.call(app(sh), sh, 'tasks.get', {'id': task['id']}) as Map;
+      }
+      expect(result['status'], 'done');
+      expect((result['lines'] as List).join('\n'), contains('webdeck-ok'));
+    }, skip: Platform.isWindows);
+
+    test('files.url only serves the app folder and remembered picks', () async {
+      final h = host();
+      final m = manifest(perms: {'files'});
+      final a = app(m);
+      final outside = File(p.join(tmp.path, 'outside.txt'))..writeAsStringSync('x');
+      await expectLater(
+        () => h.call(a, m, 'files.url', {'path': outside.path}),
+        throwsA(isA<RuntimeError>().having((e) => e.code, 'code', 'forbidden')),
+      );
+      h.pickFiles = ({required type, allowedExtensions}) async => [_FakeFile(outside.path)];
+      await h.call(a, m, 'files.pick', {'remember': true});
+      // A fresh host (simulating a restart) still honours the remembered grant.
+      final h2 = host();
+      final info = await h2.call(a, m, 'files.url', {'path': outside.path}) as Map;
+      expect(info['url'], startsWith('/__webdeck/picked/'));
+    });
+
+    test('net.download refuses local hosts', () async {
+      final h = host();
+      final m = manifest(perms: {'net', 'files'});
+      expect(
+        () => h.call(app(m), m, 'net.download', {'url': 'http://localhost/x.zip'}),
+        throwsA(isA<RuntimeError>().having((e) => e.code, 'code', 'forbidden')),
+      );
+    });
+
+    test('install-time resources unpack with strip + include filters', () {
+      final archive = Archive()
+        ..addFile(ArchiveFile.bytes('package/ruffle.js', utf8.encode('js')))
+        ..addFile(ArchiveFile.bytes('package/abc123.wasm', [0, 97, 115, 109]))
+        ..addFile(ArchiveFile.bytes('package/ruffle.js.map', utf8.encode('map')))
+        ..addFile(ArchiveFile.bytes('package/../evil.js', utf8.encode('x')));
+      final tgz = Uint8List.fromList(GZipEncoder().encode(TarEncoder().encode(archive)));
+      const r = AppResource(
+        url: 'https://example.com/ruffle.tgz',
+        target: 'ruffle',
+        strip: 'package/',
+        include: r'^package/(ruffle\.js|[0-9a-f]+\.wasm)$',
+      );
+      final files = StoreService.unpackResource(r, tgz);
+      expect(files.keys.toSet(), {'ruffle/ruffle.js', 'ruffle/abc123.wasm'});
+      expect(() => AppResource.fromJson({'url': 'http://x/y.zip', 'target': 'a'}), throwsFormatException);
+      expect(() => AppResource.fromJson({'url': 'https://x/y.zip', 'target': '../a'}), throwsFormatException);
+    });
+  });
+
   group('tools', () {
     test('blocks options that execute arbitrary programs', () {
       expect(() => ToolsService.validateArgs('yt-dlp', ['--exec', 'rm -rf ~']), throwsArgumentError);
@@ -237,6 +324,9 @@ void main() {
       expect(() => ToolsService.validateArgs('pandoc', ['--lua-filter', 'x.lua']), throwsArgumentError);
       expect(() => ToolsService.validateArgs('libreoffice', ['-env:UserInstallation=file:///tmp']), throwsArgumentError);
       ToolsService.validateArgs('yt-dlp', ['-f', 'bv*+ba/b', '--', 'https://youtu.be/x']);
+      ToolsService.validateArgs('rclone', ['lsjson', ':ftp,host=x:/']);
+      expect(() => ToolsService.validateArgs('rclone', ['serve', 'http', '/']), throwsArgumentError);
+      expect(() => ToolsService.validateArgs('rclone', ['lsjson', '--password-command', 'sh']), throwsArgumentError);
     });
   });
 
@@ -327,4 +417,24 @@ void main() {
       expect(await Directory(p.join(tmp.path, 'appdata', 'e2e-app')).exists(), isFalse);
     });
   });
+}
+
+/// Minimal picked-file stand-in for tests.
+final class _FakeFile extends PlatformFile {
+  final String _path;
+  _FakeFile(this._path);
+  @override
+  String get name => p.basename(_path);
+  @override
+  Uri get uri => Uri.file(_path);
+  @override
+  XFile get xFile => XFile(_path);
+  @override
+  int? lengthSync() => File(_path).lengthSync();
+  @override
+  Future<int?> length() async => File(_path).length();
+  @override
+  Future<Uint8List> readAsBytes() => File(_path).readAsBytes();
+  @override
+  Stream<Uint8List> readAsByteStream() => File(_path).openRead().map(Uint8List.fromList);
 }

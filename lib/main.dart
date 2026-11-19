@@ -13,6 +13,7 @@ import 'data/services/local_server_service.dart';
 import 'data/services/storage_service.dart';
 import 'runtime/app_data_store.dart';
 import 'runtime/job_scheduler.dart';
+import 'runtime/link_service.dart';
 import 'runtime/notification_service.dart';
 import 'runtime/runtime_host.dart';
 import 'runtime/settings_service.dart';
@@ -66,6 +67,9 @@ void main() async {
     baseDir: baseDir,
   );
   serverService.runtimeHost = runtime;
+  final link = LinkService(baseDir, notifications);
+  await link.load();
+  runtime.link = link;
   repository.dataStore = dataStore;
 
   final scheduler = JobScheduler(
@@ -96,6 +100,7 @@ void main() async {
         ChangeNotifierProvider.value(value: tools),
         ChangeNotifierProvider.value(value: scheduler),
         ChangeNotifierProvider.value(value: store),
+        ChangeNotifierProvider.value(value: link),
         ChangeNotifierProvider(create: (_) => ShellNavigation()),
         Provider.value(value: storageService),
         Provider.value(value: runtime),

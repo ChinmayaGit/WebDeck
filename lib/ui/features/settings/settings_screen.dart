@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../data/services/storage_service.dart';
+import '../../../runtime/link_service.dart';
 import '../../../runtime/manifest.dart';
 import '../../../runtime/settings_service.dart';
 import '../../../runtime/store_service.dart';
@@ -56,6 +57,8 @@ class SettingsScreen extends StatelessWidget {
                       ],
                     ),
                   ),
+                  const _Header('Device Link'),
+                  const _LinkCard(),
                   const _Header('Tools'),
                   const _ToolsCard(),
                   const _Header('Store sources'),
@@ -342,6 +345,160 @@ class _StorageCard extends StatelessWidget {
                 : TextButton(onPressed: () => _open(dir.path), child: const Text('Open')),
           );
         },
+      ),
+    );
+  }
+}
+
+class _LinkCard extends StatefulWidget {
+  const _LinkCard();
+
+  @override
+  State<_LinkCard> createState() => _LinkCardState();
+}
+
+class _LinkCardState extends State<_LinkCard> {
+  ({String code, DateTime expires})? _code;
+  List<String> _addrs = const [];
+
+  Future<void> _showCode(LinkService link) async {
+    final c = link.newPairCode();
+    final addrs = await link.localAddresses();
+    setState(() {
+      _code = c;
+      _addrs = addrs;
+    });
+  }
+
+  Future<void> _pairDialog(LinkService link, {String? addr}) async {
+    final addrCtl = TextEditingController(text: addr ?? '');
+    final codeCtl = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WebDeckTheme.surface,
+        title: const Text('Pair a device'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('On the other device open Settings → Device Link → "Show pairing code", then enter it here.'),
+            const SizedBox(height: 12),
+            TextField(controller: addrCtl, decoration: const InputDecoration(labelText: 'IP address (e.g. 192.168.1.20)')),
+            const SizedBox(height: 8),
+            TextField(controller: codeCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6-digit code')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final peer = await link.pairWith(addrCtl.text, codeCtl.text);
+                if (ctx.mounted) Navigator.pop(ctx);
+                messenger.showSnackBar(SnackBar(content: Text('Paired with ${peer.name}')));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: WebDeckTheme.accentRed));
+              }
+            },
+            child: const Text('Pair'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final link = context.watch<LinkService>();
+    final nearby = link.peers.where((p) => !p.paired && p.online).toList();
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('Device Link'),
+            subtitle: Text(link.running
+                ? 'On as “${link.deviceName}”. Share files, messages and clipboard with your paired devices on this network.'
+                : 'Connect WebDeck on your phone and computers over Wi-Fi: Nearby Share, Messages and Clipboard Sync.'),
+            value: link.enabled,
+            onChanged: link.setEnabled,
+          ),
+          if (link.lastError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(link.lastError!, style: const TextStyle(color: WebDeckTheme.accentRed, fontSize: 12)),
+            ),
+          if (link.enabled) ...[
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.badge_outlined),
+              title: const Text('This device’s name'),
+              subtitle: Text(link.deviceName),
+              trailing: TextButton(
+                onPressed: () async {
+                  final ctl = TextEditingController(text: link.deviceName);
+                  final name = await showDialog<String>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: WebDeckTheme.surface,
+                      title: const Text('Device name'),
+                      content: TextField(controller: ctl, autofocus: true),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                        ElevatedButton(onPressed: () => Navigator.pop(ctx, ctl.text), child: const Text('Save')),
+                      ],
+                    ),
+                  );
+                  if (name != null) await link.setDeviceName(name);
+                },
+                child: const Text('Rename'),
+              ),
+            ),
+            SwitchListTile(
+              secondary: const Icon(Icons.content_paste),
+              title: const Text('Clipboard sync'),
+              subtitle: const Text('Text you copy appears on your paired devices, and theirs here.'),
+              value: link.clipboardSync,
+              onChanged: link.setClipboardSync,
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ElevatedButton.icon(onPressed: () => _showCode(link), icon: const Icon(Icons.qr_code_2, size: 18), label: const Text('Show pairing code')),
+                  OutlinedButton.icon(onPressed: () => _pairDialog(link), icon: const Icon(Icons.add_link, size: 18), label: const Text('Pair with a code')),
+                  if (_code != null && _code!.expires.isAfter(DateTime.now()))
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: WebDeckTheme.surfaceSubtle, borderRadius: BorderRadius.circular(10), border: Border.all(color: WebDeckTheme.primary)),
+                      child: Text(
+                        'Code ${_code!.code} · ${_addrs.join(', ')}',
+                        style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 15),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            for (final p in nearby)
+              ListTile(
+                leading: const Icon(Icons.wifi_tethering),
+                title: Text(p.name),
+                subtitle: Text('Nearby · ${p.platform} · ${p.addr}'),
+                trailing: TextButton(onPressed: () => _pairDialog(link, addr: p.addr), child: const Text('Pair')),
+              ),
+            for (final p in link.pairedPeers)
+              ListTile(
+                leading: Icon(Icons.devices, color: p.online ? WebDeckTheme.accentGreen : WebDeckTheme.textSecondary),
+                title: Text(p.name),
+                subtitle: Text('${p.online ? 'Online' : 'Offline'} · ${p.platform} · ${p.addr}'),
+                trailing: IconButton(tooltip: 'Unpair', icon: const Icon(Icons.link_off, size: 20), onPressed: () => link.unpair(p.id)),
+              ),
+          ],
+        ],
       ),
     );
   }

@@ -1,0 +1,12 @@
+{
+  "id": "video-toolkit",
+  "name": "Video Toolkit",
+  "version": "1.0.0",
+  "description": "21 video tools in one place: convert between MP4, MKV, MOV, AVI and WebM, make GIFs, extract audio, compress (or compress to a size for Discord/WhatsApp), trim, crop, resize, rotate, change speed, reverse, loop, merge, watermark, add music, remove green screen and cut Reels/Shorts. Runs locally on FFmpeg.",
+  "category": "Video",
+  "icon": "movie",
+  "color": "#EC4899",
+  "permissions": ["tools", "files", "notify"],
+  "platforms": ["macos", "windows", "linux"],
+  "author": "WebDeck"
+}

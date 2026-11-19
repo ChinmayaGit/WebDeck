@@ -15,8 +15,11 @@ class RuntimePermission {
   static const notify = 'notify';
   static const jobs = 'jobs';
   static const tools = 'tools';
+  static const localnet = 'localnet';
+  static const shell = 'shell';
+  static const link = 'link';
 
-  static const all = [net, files, notify, jobs, tools];
+  static const all = [net, files, notify, jobs, tools, localnet, shell, link];
 
   static String describe(String permission) {
     switch (permission) {
@@ -30,6 +33,12 @@ class RuntimePermission {
         return 'Run background checks on a schedule';
       case tools:
         return 'Run helper programs (yt-dlp, ffmpeg, pandoc, LibreOffice)';
+      case localnet:
+        return 'Connect to servers on this computer and your local network';
+      case shell:
+        return 'Run any command on this computer (full access to your files)';
+      case link:
+        return 'Send and receive files, messages and clipboard with your paired devices';
       default:
         return permission;
     }
@@ -93,6 +102,36 @@ class JobSpec {
   }
 }
 
+/// A large asset an app fetches at install time instead of bundling it
+/// (e.g. a WebAssembly engine). Archives are verified and unpacked into [target].
+class AppResource {
+  final String url;
+  final String? sha256;
+  final String target;
+  final String? include;
+  final String? strip;
+
+  const AppResource({required this.url, this.sha256, required this.target, this.include, this.strip});
+
+  factory AppResource.fromJson(Map<String, dynamic> j) {
+    final url = j['url'] as String? ?? '';
+    final target = (j['target'] as String? ?? '').replaceAll('\\', '/');
+    if (!url.startsWith('https://')) throw const FormatException('webdeck.json: resource url must be https');
+    if (target.isEmpty || target.startsWith('/') || target.split('/').contains('..')) {
+      throw const FormatException('webdeck.json: resource target must be a relative folder');
+    }
+    return AppResource(url: url, sha256: j['sha256'] as String?, target: target, include: j['include'] as String?, strip: j['strip'] as String?);
+  }
+
+  Map<String, dynamic> toJson() => {
+        'url': url,
+        if (sha256 != null) 'sha256': sha256,
+        'target': target,
+        if (include != null) 'include': include,
+        if (strip != null) 'strip': strip,
+      };
+}
+
 /// Parsed `webdeck.json`. Its presence marks a bundle as a WebDeck runtime app:
 /// a static web app that uses the host for storage, network, files and jobs
 /// instead of shipping its own backend.
@@ -109,6 +148,7 @@ class WebDeckManifest {
   final List<JobSpec> jobs;
   final List<String> platforms;
   final String? author;
+  final List<AppResource> resources;
 
   const WebDeckManifest({
     required this.id,
@@ -123,6 +163,7 @@ class WebDeckManifest {
     this.jobs = const [],
     this.platforms = const [],
     this.author,
+    this.resources = const [],
   });
 
   static const fileName = 'webdeck.json';
@@ -172,6 +213,9 @@ class WebDeckManifest {
           .toList(),
       platforms: (json['platforms'] as List?)?.cast<String>() ?? const [],
       author: json['author'] as String?,
+      resources: ((json['resources'] as List?) ?? const [])
+          .map((r) => AppResource.fromJson(r as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -188,6 +232,7 @@ class WebDeckManifest {
         'jobs': jobs.map((j) => j.toJson()).toList(),
         'platforms': platforms,
         if (author != null) 'author': author,
+        if (resources.isNotEmpty) 'resources': resources.map((r) => r.toJson()).toList(),
       };
 
   /// Loads `webdeck.json` from an app directory, or returns null when absent/invalid.

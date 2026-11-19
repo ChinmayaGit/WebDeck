@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invoice Generator</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 700px) { .two { grid-template-columns: 1fr; } }
+    textarea.wd-input { min-height: 84px; font-family: var(--wd-font); font-size: 14px; }
+    .items td { padding: 4px; }
+    .items input { padding: 7px 8px; }
+    .totals { margin-left: auto; width: min(320px, 100%); }
+    .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
+    .totals .grand { font-size: 18px; font-weight: 800; border-top: 1px solid var(--wd-border); margin-top: 6px; padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">🧾</div>
+      <div><h1>Invoice Generator</h1><div class="wd-sub">Your details are remembered for next time</div></div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="folder">Open invoices folder</button>
+      <button class="wd-btn wd-btn-primary" id="make">Create PDF</button>
+    </div>
+    <div class="wd-stack">
+      <div class="wd-card two">
+        <div><label class="wd-label">From (your business)</label><textarea class="wd-input" id="from" placeholder="Your Company&#10;Street, City&#10;email@example.com"></textarea></div>
+        <div><label class="wd-label">Bill to</label><textarea class="wd-input" id="to" placeholder="Client name&#10;Address"></textarea></div>
+      </div>
+      <div class="wd-card wd-fields">
+        <div><label class="wd-label">Invoice number</label><input class="wd-input" id="number"></div>
+        <div><label class="wd-label">Date</label><input class="wd-input" id="date" type="date"></div>
+        <div><label class="wd-label">Due date</label><input class="wd-input" id="due" type="date"></div>
+        <div><label class="wd-label">Currency</label><select class="wd-select" id="currency"><option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>CAD</option><option>AUD</option><option>JPY</option><option>SGD</option><option>AED</option></select></div>
+        <div><label class="wd-label">Accent color</label><input type="color" id="color" value="#1f6feb" style="width:100%;height:38px;border:0;background:none"></div>
+      </div>
+      <div class="wd-card">
+        <table class="wd-table items"><thead><tr><th style="width:55%">Description</th><th>Qty</th><th>Price</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+        <button class="wd-btn wd-btn-sm" id="addRow" style="margin-top:8px">+ Add line</button>
+        <div class="wd-row" style="margin-top:14px;align-items:flex-start">
+          <div class="wd-fields wd-grow" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+            <div><label class="wd-label">Tax %</label><input class="wd-input" id="tax" type="number" min="0" step="any" value="0"></div>
+            <div><label class="wd-label">Discount</label><input class="wd-input" id="discount" type="number" min="0" step="any" value="0"></div>
+          </div>
+          <div class="totals" id="totals"></div>
+        </div>
+      </div>
+      <div class="wd-card"><label class="wd-label">Notes / payment details</label><textarea class="wd-input" id="notes" placeholder="Bank details, payment terms, thank-you note…"></textarea></div>
+      <div id="result"></div>
+    </div>
+  </div>
+  <script src="/__webdeck/vendor/pdf-lib.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

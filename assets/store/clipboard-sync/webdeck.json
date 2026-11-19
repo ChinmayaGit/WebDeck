@@ -1,0 +1,11 @@
+{
+  "id": "clipboard-sync",
+  "name": "Clipboard Sync",
+  "version": "1.0.0",
+  "description": "Copy on one device, paste on another. Text you copy is shared with your paired devices automatically, with a searchable clipboard history. Works over Wi-Fi with Device Link.",
+  "category": "Network",
+  "icon": "clipboard",
+  "color": "#9333EA",
+  "permissions": ["link"],
+  "author": "WebDeck"
+}

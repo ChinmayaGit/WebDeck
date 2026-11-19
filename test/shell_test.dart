@@ -9,6 +9,7 @@ import 'package:webdeck/data/services/storage_service.dart';
 import 'package:webdeck/runtime/app_data_store.dart';
 import 'package:webdeck/runtime/app_icons.dart';
 import 'package:webdeck/runtime/job_scheduler.dart';
+import 'package:webdeck/runtime/link_service.dart';
 import 'package:webdeck/runtime/notification_service.dart';
 import 'package:webdeck/runtime/settings_service.dart';
 import 'package:webdeck/runtime/store_service.dart';
@@ -44,6 +45,7 @@ void main() {
         store: data,
       );
       final store = StoreService(repository: repo, settings: settings);
+      final link = LinkService(base, notifications);
       final catalog = CatalogViewModel(repo);
       await tester.runAsync(() async {
         await store.refresh();
@@ -59,6 +61,7 @@ void main() {
           ChangeNotifierProvider.value(value: tools),
           ChangeNotifierProvider.value(value: scheduler),
           ChangeNotifierProvider.value(value: store),
+          ChangeNotifierProvider.value(value: link),
           ChangeNotifierProvider(create: (_) => ShellNavigation()),
           Provider.value(value: storage),
         ],
@@ -70,12 +73,29 @@ void main() {
 
       nav.value = ShellNavigation.store;
       await tester.pump();
-      expect(store.entries.length, 6);
-      expect(find.text('Media Downloader'), findsOneWidget);
-      // Desktop-only apps are installable on this (desktop) test host.
-      expect(find.text('Install'), findsWidgets);
-
-      await tester.tap(find.text('Media Downloader'));
+      expect(store.entries.length, 27);
+      expect(store.categories.take(4), ['PDF', 'Image', 'Video', 'Audio']);
+      expect(find.text('WebDeck Store'), findsOneWidget);
+      final scroller = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(find.text('Categories'), 200, scrollable: scroller);
+      await tester.scrollUntilVisible(find.text('Featured'), 200, scrollable: scroller);
+      // Category rows further down offer "See all", which opens the filtered grid.
+      for (var i = 0; i < 40 && find.text('See all').hitTestable().evaluate().isEmpty; i++) {
+        await tester.drag(scroller, const Offset(0, -200));
+        await tester.pump();
+      }
+      await tester.pump();
+      await tester.tap(find.text('See all').hitTestable().first);
+      await tester.pump();
+      expect(find.byTooltip('Back to Store'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to Store'));
+      await tester.pump();
+      for (var i = 0; i < 40 && find.text('Media Downloader').evaluate().isEmpty; i++) {
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -250));
+        await tester.pump();
+      }
+      expect(find.text('Media Downloader'), findsWidgets);
+      await tester.tap(find.text('Media Downloader').first);
       await tester.pump();
       expect(find.text('Run helper programs (yt-dlp, ffmpeg, pandoc, LibreOffice)'), findsOneWidget);
       await tester.tap(find.text('Close'));

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API Client</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; align-items: start; }
+    @media (max-width: 860px) { .shell { grid-template-columns: 1fr; } }
+    .side { max-height: calc(100vh - 120px); overflow: auto; }
+    .req-row { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .req-row:hover { background: var(--wd-surface-2); }
+    .m { font: 700 10px var(--wd-mono); width: 44px; flex: none; }
+    .m.GET { color: #3fb950; } .m.POST { color: #d29922; } .m.PUT { color: #388bfd; } .m.PATCH { color: #a371f7; } .m.DELETE { color: #f85149; } .m.HEAD, .m.OPTIONS { color: #8b949e; }
+    .urlbar { display: grid; grid-template-columns: 110px 1fr auto auto; gap: 8px; }
+    .kvt { width: 100%; border-collapse: collapse; }
+    .kvt td { padding: 3px; } .kvt input[type=text] { font-family: var(--wd-mono); font-size: 12px; padding: 6px 8px; }
+    .status { font-weight: 800; }
+    .s2 { color: #3fb950; } .s3 { color: #388bfd; } .s4 { color: #d29922; } .s5 { color: #f85149; }
+    pre.body { max-height: 52vh; overflow: auto; background: #010409; border: 1px solid var(--wd-border); border-radius: 8px; padding: 12px; margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+    .j-k { color: #79c0ff; } .j-s { color: #a5d6ff; } .j-n { color: #ffa657; } .j-b { color: #ff7b72; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1400px">
+    <div class="wd-header">
+      <div class="wd-icon">🛰️</div>
+      <div><h1>API Client</h1><div class="wd-sub">HTTP requests, collections &amp; environments</div></div>
+      <div class="wd-spacer"></div>
+      <label class="wd-label" style="margin:0">Environment</label><select class="wd-select" id="env" style="width:auto"></select><button class="wd-btn wd-btn-sm" id="editEnv">Edit</button>
+    </div>
+    <div class="shell">
+      <aside class="wd-card side">
+        <div class="wd-row" style="margin-bottom:6px"><b class="wd-grow">Collections</b><button class="wd-btn wd-btn-sm" id="newReq">+ New</button></div>
+        <div id="cols"></div>
+        <div class="wd-row" style="margin:14px 0 6px"><b class="wd-grow">History</b><button class="wd-btn wd-btn-sm wd-btn-ghost" id="clearHist">Clear</button></div>
+        <div id="hist"></div>
+      </aside>
+      <main class="wd-stack">
+        <div class="wd-card wd-stack">
+          <div class="wd-row"><input class="wd-input wd-grow" id="name" placeholder="Request name" style="font-weight:600"><input class="wd-input" id="col" placeholder="Collection" style="width:160px"><button class="wd-btn" id="save">Save</button><button class="wd-btn wd-btn-ghost" id="importCurl">Import cURL</button><button class="wd-btn wd-btn-ghost" id="copyCurl">Copy as cURL</button></div>
+          <div class="urlbar"><select class="wd-select" id="method"></select><input class="wd-input wd-mono" id="url" placeholder="https://api.example.com/users or http://localhost:3000/api/{{id}}"><button class="wd-btn wd-btn-primary" id="send">Send</button><button class="wd-btn" id="cancel" hidden>Cancel</button></div>
+          <div class="wd-tabs" id="reqTabs"><button class="wd-tab" data-rt="params" aria-selected="true">Params</button><button class="wd-tab" data-rt="headers" aria-selected="false">Headers</button><button class="wd-tab" data-rt="body" aria-selected="false">Body</button><button class="wd-tab" data-rt="auth" aria-selected="false">Auth</button><button class="wd-tab" data-rt="settings" aria-selected="false">Settings</button></div>
+          <div id="rt-params"></div>
+          <div id="rt-headers" hidden></div>
+          <div id="rt-body" hidden>
+            <div class="wd-row wd-small" style="margin-bottom:8px"><label><input type="radio" name="bt" value="none" checked> None</label><label><input type="radio" name="bt" value="json"> JSON</label><label><input type="radio" name="bt" value="form"> Form URL-encoded</label><label><input type="radio" name="bt" value="raw"> Raw text</label><div class="wd-spacer"></div><button class="wd-btn wd-btn-sm wd-btn-ghost" id="fmtBody">Format JSON</button></div>
+            <textarea class="wd-input" id="body" style="min-height:160px" spellcheck="false"></textarea><div id="formBody" hidden></div>
+          </div>
+          <div id="rt-auth" hidden>
+            <div class="wd-fields"><div><label class="wd-label">Type</label><select class="wd-select" id="authType"><option value="none">No auth</option><option value="bearer">Bearer token</option><option value="basic">Basic auth</option><option value="apikey">API key header</option></select></div>
+            <div id="authFields" style="grid-column: span 2"></div></div>
+          </div>
+          <div id="rt-settings" hidden class="wd-fields">
+            <div><label class="wd-label">Timeout (seconds)</label><input class="wd-input" id="timeout" type="number" value="30" min="1" max="120"></div>
+            <label class="wd-row wd-small" style="align-self:end"><input type="checkbox" id="redirects" checked> Follow redirects</label>
+          </div>
+        </div>
+        <div class="wd-card" id="resp"><div class="wd-empty" style="padding:30px">Send a request to see the response.</div></div>
+      </main>
+    </div>
+  </div>
+  <dialog class="wd-dialog" id="dlg"></dialog>
+  <script src="app.js"></script>
+</body>
+</html>

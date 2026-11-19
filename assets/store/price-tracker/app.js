@@ -101,12 +101,15 @@
   let list = [];
   let points = {}; // itemId -> [{price, at}]
   const checking = new Set();
+  const expanded = new Set();
+  let view = 'items';
 
   async function load() {
     list = await items.find(null, { sort: '-_createdAt' });
     points = {};
     for (const p of await history.find(null, { sort: 'at' })) (points[p.itemId] = points[p.itemId] || []).push(p);
     render();
+    if (view === 'history') renderHistory();
   }
 
   function sparkline(pts, w = 120, h = 34) {
@@ -144,7 +147,9 @@
           : it.target && it.lastPrice != null && it.lastPrice <= it.target
             ? '<span class="wd-badge wd-badge-green">At target</span>'
             : '';
-      return `<div class="wd-item wd-clickable" data-id="${it._id}">
+      const open = expanded.has(it._id);
+      const pts = points[it._id] || [];
+      return `<div class="row-wrap"><div class="wd-item wd-clickable ${open ? 'open' : ''}" data-id="${it._id}">
         ${it.image ? `<div class="thumb" style="background-image:url(&quot;${esc(encodeURI(it.image))}&quot;)"></div>` : '<div class="thumb none">🏷️</div>'}
         <div class="wd-grow">
           <div class="wd-ellipsis" style="font-weight:600">${esc(it.title || it.url)}</div>
@@ -153,14 +158,70 @@
         </div>
         ${sparkline(points[it._id])}
         <div><div class="price">${fmt(it.lastPrice, it.currency)}</div>${deltaHtml}</div>
-      </div>`;
+        <button class="wd-btn wd-btn-sm" data-toggle="${it._id}" title="Show price history">📈 ${pts.length}</button>
+      </div>
+      ${open ? `<div class="inline-history">${chart(pts, it.currency)}${changesTable(pts, it.currency, 8)}</div>` : ''}</div>`;
     }).join('');
   }
 
   $('list').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-toggle]');
+    if (t) {
+      const id = t.dataset.toggle;
+      if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+      render();
+      return;
+    }
     const row = e.target.closest('[data-id]');
     if (row) openDetail(row.dataset.id);
   });
+
+  /** Rows where the price changed (newest first) with the difference to the previous record. */
+  function changesTable(pts, currency, limit) {
+    if (!pts.length) return '';
+    const rows = [];
+    for (let i = pts.length - 1; i >= 0 && rows.length < limit; i--) {
+      const prev = pts[i - 1];
+      const diff = prev ? pts[i].price - prev.price : 0;
+      rows.push(`<tr><td>${new Date(pts[i].at).toLocaleString()}</td><td>${fmt(pts[i].price, currency)}</td>
+        <td class="${diff < 0 ? 'down' : diff > 0 ? 'up' : 'wd-muted'}">${prev ? (diff ? (diff < 0 ? '▼ ' : '▲ ') + fmt(Math.abs(diff), currency) : 'same') : 'first check'}</td></tr>`);
+    }
+    return `<table class="wd-table" style="margin-top:10px"><tr><th>Date</th><th>Price</th><th>Change</th></tr>${rows.join('')}</table>`;
+  }
+
+  // ---------------------------------------------------- history timeline
+  function renderHistory() {
+    const byId = Object.fromEntries(list.map((i) => [i._id, i]));
+    const events = [];
+    for (const [id, pts] of Object.entries(points)) {
+      const it = byId[id];
+      if (!it) continue;
+      pts.forEach((p, i) => {
+        const prev = pts[i - 1];
+        if (!prev || prev.price !== p.price) events.push({ it, p, prev });
+      });
+    }
+    events.sort((a, b) => Date.parse(b.p.at) - Date.parse(a.p.at));
+    const drops = events.filter((e) => e.prev && e.p.price < e.prev.price).length;
+    $('historyView').innerHTML = events.length
+      ? `<div class="wd-card"><div class="wd-row" style="margin-bottom:8px"><b class="wd-grow">${events.length} price events</b><span class="wd-badge wd-badge-green">${drops} drops</span></div>
+        <table class="wd-table"><tr><th>Date</th><th>Item</th><th>Price</th><th>Change</th></tr>
+        ${events.slice(0, 300).map(({ it, p, prev }) => {
+          const diff = prev ? p.price - prev.price : 0;
+          const pct = prev ? Math.abs((diff / prev.price) * 100).toFixed(1) : '';
+          return `<tr data-open="${it._id}" style="cursor:pointer"><td class="wd-small">${new Date(p.at).toLocaleString()}</td><td class="wd-ellipsis" style="max-width:320px">${esc(it.title || it.url)}</td>
+            <td><b>${fmt(p.price, it.currency)}</b></td><td class="${diff < 0 ? 'down' : diff > 0 ? 'up' : 'wd-muted'}">${prev ? `${diff < 0 ? '▼' : '▲'} ${fmt(Math.abs(diff), it.currency)} (${pct}%)` : 'started tracking'}</td></tr>`;
+        }).join('')}</table></div>`
+      : '<div class="wd-empty"><div class="wd-empty-icon">📈</div>No price history yet. Prices are recorded on every check.</div>';
+  }
+  $('historyView').addEventListener('click', (e) => { const r = e.target.closest('[data-open]'); if (r) openDetail(r.dataset.open); });
+  document.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => {
+    view = b.dataset.view;
+    document.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+    $('list').hidden = view !== 'items';
+    $('historyView').hidden = view !== 'history';
+    if (view === 'history') renderHistory();
+  }));
 
   $('addForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -260,9 +321,8 @@
         <div class="wd-grow"><label class="wd-label">CSS selector (optional)</label><input class="wd-input" id="dSelector" value="${esc(it.selector || '')}"></div>
         <label class="wd-row wd-small" style="align-self:end;padding-bottom:10px"><input type="checkbox" id="dPaused" ${it.paused ? 'checked' : ''}> Pause</label>
       </div>
-      <details style="margin-top:12px"><summary class="wd-small wd-muted" style="cursor:pointer">History (${pts.length} records)</summary>
-        <div class="history"><table class="wd-table"><tr><th>Date</th><th>Price</th></tr>
-        ${pts.slice().reverse().map((p) => `<tr><td>${new Date(p.at).toLocaleString()}</td><td>${fmt(p.price, it.currency)}</td></tr>`).join('')}</table></div>
+      <details open style="margin-top:12px"><summary class="wd-small wd-muted" style="cursor:pointer">Price history (${pts.length} records)</summary>
+        <div class="history">${changesTable(pts, it.currency, 500)}</div>
       </details>
       <div class="wd-row" style="margin-top:16px">
         <button class="wd-btn wd-btn-danger" data-act="delete">Delete</button>

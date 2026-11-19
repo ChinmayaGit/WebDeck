@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D Model Converter</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">🧊</div>
+      <div><h1>3D Model Converter</h1><div class="wd-sub">OBJ ⇄ STL for 3D printing</div></div>
+    </div>
+    <div class="wd-card wd-stack">
+      <div class="wd-row"><button class="wd-btn wd-btn-primary" id="pick">Choose .obj or .stl files</button><div class="wd-spacer"></div>
+        <label class="wd-label" style="margin:0">STL output</label><select class="wd-select" id="stlfmt" style="width:auto"><option value="bin">Binary (smaller)</option><option value="ascii">ASCII</option></select></div>
+      <div class="wd-list" id="list"></div>
+    </div>
+  </div>
+  <script src="convert3d.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

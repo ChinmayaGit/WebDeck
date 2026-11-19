@@ -1,0 +1,12 @@
+{
+  "id": "file-transfer",
+  "name": "File Transfer",
+  "version": "1.0.0",
+  "description": "Browse and transfer files on FTP/FTPS, SFTP, WebDAV (Nextcloud/ownCloud), SMB network shares and S3-compatible storage. Save connections, upload, download, create folders and delete, with progress. Powered by rclone, which WebDeck installs for you.",
+  "category": "Network",
+  "icon": "transfer",
+  "color": "#0D9488",
+  "permissions": ["tools", "files", "notify"],
+  "platforms": ["macos", "windows", "linux"],
+  "author": "WebDeck"
+}

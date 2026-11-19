@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Doc Converter</title>
+  <title>Office Converter</title>
   <link rel="stylesheet" href="/__webdeck/ui.css">
   <style>
     .tool { display: flex; align-items: center; gap: 10px; }
@@ -16,8 +16,8 @@
     <div class="wd-header">
       <div class="wd-icon">📄</div>
       <div>
-        <h1>Doc Converter</h1>
-        <div class="wd-sub">Word · Markdown · HTML · ODT · RTF · EPUB · PDF</div>
+        <h1>Office Converter</h1>
+        <div class="wd-sub">Word · Excel · PowerPoint · Markdown · HTML · EPUB · PDF</div>
       </div>
       <div class="wd-spacer"></div>
       <button class="wd-btn" id="openFolder">Open output folder</button>
@@ -34,14 +34,27 @@
         <div class="wd-spacer"></div>
         <label class="wd-label" for="target" style="margin:0">Convert to</label>
         <select class="wd-select" id="target" style="width:auto">
-          <option value="pdf">PDF</option>
-          <option value="docx" selected>Word (.docx)</option>
-          <option value="odt">OpenDocument (.odt)</option>
-          <option value="rtf">Rich Text (.rtf)</option>
-          <option value="html">HTML</option>
-          <option value="md">Markdown</option>
-          <option value="txt">Plain text</option>
-          <option value="epub">EPUB e-book</option>
+          <optgroup label="Any document">
+            <option value="pdf">PDF</option>
+          </optgroup>
+          <optgroup label="Text documents">
+            <option value="docx" selected>Word (.docx)</option>
+            <option value="odt">OpenDocument Text (.odt)</option>
+            <option value="rtf">Rich Text (.rtf)</option>
+            <option value="html">HTML</option>
+            <option value="md">Markdown</option>
+            <option value="txt">Plain text</option>
+            <option value="epub">EPUB e-book</option>
+          </optgroup>
+          <optgroup label="Spreadsheets">
+            <option value="xlsx">Excel (.xlsx)</option>
+            <option value="ods">OpenDocument Spreadsheet (.ods)</option>
+            <option value="csv">CSV (first sheet)</option>
+          </optgroup>
+          <optgroup label="Presentations">
+            <option value="pptx">PowerPoint (.pptx)</option>
+            <option value="odp">OpenDocument Presentation (.odp)</option>
+          </optgroup>
         </select>
         <button class="wd-btn wd-btn-primary" id="convert" disabled>Convert</button>
       </div>

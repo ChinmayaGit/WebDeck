@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Developer Toolkit</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .io { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .io { grid-template-columns: 1fr; } }
+    .io textarea { min-height: 280px; }
+    .out-ok { border-color: rgba(63,185,80,.5) !important; }
+    .out-err { border-color: rgba(248,81,73,.6) !important; }
+    .kv { display: grid; grid-template-columns: 140px 1fr auto; gap: 6px 10px; align-items: center; }
+    .kv code { background: var(--wd-surface-2); padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; }
+    .swatch { width: 100%; height: 80px; border-radius: 10px; border: 1px solid var(--wd-border); }
+    .preview-stage { min-height: 260px; border-radius: 12px; display: grid; place-items: center; padding: 30px; }
+    mark { background: rgba(210,153,34,.45); color: inherit; border-radius: 3px; }
+    .qr { background: #fff; padding: 16px; border-radius: 12px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1200px">
+    <div class="wd-header">
+      <div class="wd-icon">🧰</div>
+      <div><h1>Developer Toolkit</h1><div class="wd-sub">Everything runs locally in this window</div></div>
+      <div class="wd-spacer"></div>
+      <input class="wd-input" id="search" placeholder="Find a tool…" style="width:220px">
+    </div>
+    <div class="wd-toolkit">
+      <nav class="wd-toollist" id="list"></nav>
+      <main id="main"></main>
+    </div>
+  </div>
+  <script src="/__webdeck/vendor/qrcode.js"></script>
+  <script src="/__webdeck/vendor/beautify.min.js"></script>
+  <script src="/__webdeck/vendor/beautify-css.min.js"></script>
+  <script src="/__webdeck/vendor/beautify-html.min.js"></script>
+  <script src="md5.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

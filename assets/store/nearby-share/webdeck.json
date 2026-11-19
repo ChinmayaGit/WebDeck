@@ -1,0 +1,11 @@
+{
+  "id": "nearby-share",
+  "name": "Nearby Share",
+  "version": "1.0.0",
+  "description": "Send photos, videos, documents and any other files between your phone and computers over Wi-Fi: no cables, no cloud, no size limits. Uses WebDeck Device Link with paired devices only.",
+  "category": "Network",
+  "icon": "share",
+  "color": "#2563EB",
+  "permissions": ["link", "files"],
+  "author": "WebDeck"
+}

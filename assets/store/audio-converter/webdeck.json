@@ -1,0 +1,12 @@
+{
+  "id": "audio-converter",
+  "name": "Audio Converter",
+  "version": "1.0.0",
+  "description": "Convert between MP3, WAV, OGG, AAC, M4A, FLAC and Opus in any direction, compress audio, trim, normalize loudness, change speed, fade in/out and join tracks. Runs locally on FFmpeg.",
+  "category": "Audio",
+  "icon": "music",
+  "color": "#14B8A6",
+  "permissions": ["tools", "files", "notify"],
+  "platforms": ["macos", "windows", "linux"],
+  "author": "WebDeck"
+}

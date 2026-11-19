@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workout</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .stat { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 12px 14px; }
+    .stat b { display: block; font-size: 22px; } .stat span { color: var(--wd-muted); font-size: 12px; }
+    .ex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .ex { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 10px; overflow: hidden; cursor: pointer; }
+    .ex:hover { border-color: #484f58; }
+    .ex img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #fff; display: block; }
+    .ex .meta { padding: 8px 10px; }
+    .ex .meta b { display: block; font-size: 13px; text-transform: capitalize; }
+    .sets { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .sets td, .sets th { padding: 4px 6px; text-align: center; font-size: 13px; }
+    .sets input { width: 80px; text-align: center; padding: 6px; }
+    .sets tr.done { background: rgba(63,185,80,.12); }
+    .tick { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--wd-border); background: var(--wd-surface-2); cursor: pointer; color: var(--wd-text); }
+    .tick.on { background: var(--wd-green); border-color: var(--wd-green); color: #04260f; }
+    .timer { position: fixed; right: 18px; bottom: 18px; background: var(--wd-surface); border: 1px solid var(--wd-accent); border-radius: 14px; padding: 12px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 20; text-align: center; }
+    .timer b { font-size: 28px; font-variant-numeric: tabular-nums; display: block; }
+    .cap { text-transform: capitalize; }
+    dialog img.demo { width: 100%; max-width: 320px; border-radius: 10px; background: #fff; display: block; margin: 0 auto 12px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1100px">
+    <div class="wd-header">
+      <div class="wd-icon">🏋️</div>
+      <div><h1>Workout</h1><div class="wd-sub" id="sub">Gym log</div></div>
+      <div class="wd-spacer"></div>
+      <div class="wd-tabs"><button class="wd-tab" data-tab="log" aria-selected="true">Log</button><button class="wd-tab" data-tab="library" aria-selected="false">Exercises</button><button class="wd-tab" data-tab="routines" aria-selected="false">Routines</button><button class="wd-tab" data-tab="history" aria-selected="false">History</button></div>
+    </div>
+    <section id="log"></section>
+    <section id="library" hidden>
+      <div class="wd-row" style="margin-bottom:12px"><input class="wd-input wd-grow" id="q" placeholder="Search 1,300+ exercises…"><select class="wd-select" id="muscle" style="width:auto"><option value="">All muscles</option></select><select class="wd-select" id="equip" style="width:auto"><option value="">All equipment</option></select></div>
+      <div class="ex-grid" id="exGrid"></div>
+      <div style="text-align:center;margin-top:14px"><button class="wd-btn" id="more" hidden>Show more</button></div>
+    </section>
+    <section id="routines" hidden></section>
+    <section id="history" hidden></section>
+  </div>
+  <dialog class="wd-dialog" id="dlg" style="width:min(560px, calc(100vw - 32px))"></dialog>
+  <div class="timer" id="timer" hidden><span class="wd-small wd-muted">Rest</span><b id="tLeft">1:30</b><div class="wd-row" style="justify-content:center;gap:4px"><button class="wd-btn wd-btn-sm" id="tMinus">−15</button><button class="wd-btn wd-btn-sm" id="tPlus">+15</button><button class="wd-btn wd-btn-sm" id="tSkip">Skip</button></div></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -60,7 +60,8 @@
   function setMode(m) {
     mode = m;
     document.querySelectorAll('.wd-tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.mode === m)));
-    document.querySelectorAll('[data-for]').forEach((el) => { el.hidden = el.dataset.for !== m; });
+    document.querySelectorAll('[data-for]').forEach((el) => { el.hidden = el.dataset.for !== m || (el.dataset.preset === '1' && !$('playlist').checked); });
+    if (typeof renderPicker === 'function' && analyzed) renderPicker();
     try { localStorage.setItem('md-mode', m); } catch (_) {}
   }
   document.querySelectorAll('.wd-tab').forEach((t) => (t.onclick = () => setMode(t.dataset.mode)));
@@ -91,11 +92,136 @@
   }
 
   // -------------------------------------------------------------- downloads
+  // ------------------------------------------------- format picker (yt-dlp -J)
+  let analyzed = null; // { url, info, video:[], audio:[] }
+  let choice = null;
+
+  const mb = (n) => (n ? (n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : Math.max(0.1, n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB') : '');
+  const sizeOf = (f, dur) => f.filesize || f.filesize_approx || (f.tbr && dur ? (f.tbr * 1000 / 8) * dur : 0);
+  const fmtDur = (s) => (s ? `${Math.floor(s / 3600) ? Math.floor(s / 3600) + ':' : ''}${String(Math.floor((s % 3600) / 60)).padStart(Math.floor(s / 3600) ? 2 : 1, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '');
+
+  async function analyze(url) {
+    $('go').disabled = true;
+    $('go').textContent = 'Reading link…';
+    $('picker').hidden = false;
+    $('picker').innerHTML = '<div class="wd-progress wd-indeterminate"><div></div></div><p class="wd-small wd-muted" style="margin-top:8px">Fetching available qualities…</p>';
+    try {
+      const task = await wd.tools.run('yt-dlp', ['-J', '--no-playlist', '--no-warnings', '--', url]);
+      const jsonLine = task.lines.find((l) => l.startsWith('{'));
+      if (task.status !== 'done' || !jsonLine) {
+        const err = task.lines.filter((l) => l.startsWith('ERROR')).pop() || task.error || 'Could not read this link';
+        throw new Error(err.replace(/^ERROR:\s*/, ''));
+      }
+      const info = JSON.parse(jsonLine);
+      const dur = info.duration || 0;
+      const formats = info.formats || [];
+      const audioOnly = formats.filter((f) => f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'));
+      const bestAudio = audioOnly.slice().sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0))[0];
+      // Best stream per resolution, preferring H.264/MP4 for compatibility at equal height.
+      const byHeight = new Map();
+      for (const f of formats.filter((x) => x.vcodec && x.vcodec !== 'none' && x.height)) {
+        const cur = byHeight.get(f.height);
+        const score = (x) => (x.tbr || 0) + (/avc|h264/.test(x.vcodec) ? 1e5 : 0) + (x.fps > 30 ? 5e4 : 0);
+        if (!cur || score(f) > score(cur)) byHeight.set(f.height, f);
+      }
+      const video = [...byHeight.values()].sort((a, b) => b.height - a.height).map((f) => {
+        const needsAudio = !f.acodec || f.acodec === 'none';
+        return {
+          id: needsAudio ? `${f.format_id}+bestaudio/best` : f.format_id,
+          label: `${f.height}p`,
+          detail: [f.ext.toUpperCase(), f.fps ? Math.round(f.fps) + ' fps' : '', (f.vcodec || '').split('.')[0], mb(sizeOf(f, dur) + (needsAudio && bestAudio ? sizeOf(bestAudio, dur) : 0)) ? '~' + mb(sizeOf(f, dur) + (needsAudio && bestAudio ? sizeOf(bestAudio, dur) : 0)) : ''].filter(Boolean).join(' · '),
+          height: f.height,
+        };
+      });
+      const audio = audioOnly.sort((a, b) => (b.abr || b.tbr || 0) - (a.abr || a.tbr || 0)).map((f) => ({
+        id: f.format_id,
+        label: `${Math.round(f.abr || f.tbr || 0) || '?'} kbps`,
+        detail: [f.ext.toUpperCase(), (f.acodec || '').split('.')[0], f.format_note || '', mb(sizeOf(f, dur)) ? '~' + mb(sizeOf(f, dur)) : ''].filter(Boolean).join(' · '),
+        ext: f.ext,
+      }));
+      if (!video.length && !audio.length) {
+        // Some sites only expose a single combined format.
+        video.push({ id: 'best', label: 'Best', detail: (info.ext || '').toUpperCase(), height: info.height || 0 });
+      }
+      analyzed = { url, info, video, audio };
+      choice = mode === 'audio' ? audio[0] || null : video.find((v) => v.height <= 1080) || video[0] || null;
+      renderPicker();
+    } catch (err) {
+      $('picker').innerHTML = `<div class="wd-error">${esc(err.message)}</div>`;
+    } finally {
+      $('go').disabled = false;
+      $('go').textContent = 'Get formats';
+    }
+  }
+
+  function renderPicker() {
+    if (!analyzed) return;
+    const { info, video, audio } = analyzed;
+    const list = mode === 'audio' ? audio : video;
+    if (choice && !list.includes(choice)) choice = list[0] || null;
+    const outSel = mode === 'audio'
+      ? `<select class="wd-select" id="pickOut" style="width:auto">${[['mp3', 'MP3'], ['m4a', 'M4A'], ['opus', 'Opus'], ['flac', 'FLAC'], ['wav', 'WAV'], ['original', 'Keep original']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>`
+      : `<select class="wd-select" id="pickOut" style="width:auto">${[['mp4', 'MP4'], ['mkv', 'MKV'], ['webm', 'WebM']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>`;
+    $('picker').innerHTML = `
+      <div class="media-head">${info.thumbnail ? `<img src="${esc(info.thumbnail)}" alt="" referrerpolicy="no-referrer">` : ''}
+        <div class="wd-grow"><h2 style="margin-bottom:4px">${esc(info.title || analyzed.url)}</h2>
+        <div class="wd-small wd-muted">${esc([info.uploader || info.channel, fmtDur(info.duration), info.extractor_key].filter(Boolean).join(' · '))}</div></div></div>
+      <label class="wd-label">${mode === 'audio' ? 'Audio quality' : 'Video quality'}</label>
+      ${list.length ? `<div class="choices">${list.map((c, i) => `<button class="choice" data-choice="${i}" aria-pressed="${c === choice}"><b>${esc(c.label)}</b><span>${esc(c.detail)}</span></button>`).join('')}</div>`
+        : `<div class="wd-notice">No ${mode === 'audio' ? 'separate audio' : 'video'} streams found${mode === 'audio' ? '. The audio will be extracted from the video instead.' : ''}</div>`}
+      <div class="wd-row" style="margin-top:14px"><label class="wd-label" style="margin:0">Save as</label>${outSel}<div class="wd-spacer"></div>
+        <button class="wd-btn" id="pickCancel">Cancel</button><button class="wd-btn wd-btn-primary" id="pickGo">Download</button></div>`;
+  }
+
+  $('picker').addEventListener('click', async (e) => {
+    const c = e.target.closest('[data-choice]');
+    if (c) { choice = (mode === 'audio' ? analyzed.audio : analyzed.video)[+c.dataset.choice]; renderPicker(); return; }
+    if (e.target.id === 'pickCancel') { analyzed = null; $('picker').hidden = true; return; }
+    if (e.target.id !== 'pickGo') return;
+    const out = $('pickOut').value;
+    const meta = $('meta').checked;
+    const args = ['--newline', '--no-mtime', '--no-colors', '--no-playlist', '-o', '%(title).150B [%(id)s].%(ext)s'];
+    let label;
+    if (mode === 'audio') {
+      args.push('-f', choice ? `${choice.id}/bestaudio/best` : 'bestaudio/best');
+      if (out !== 'original') args.push('-x', '--audio-format', out, '--audio-quality', '0');
+      if (meta) args.push('--embed-metadata', ...(['wav', 'original'].includes(out) ? [] : ['--embed-thumbnail']));
+      label = `Music · ${choice ? choice.label : 'best'} · ${out === 'original' ? (choice?.ext || 'original').toUpperCase() : out.toUpperCase()}`;
+    } else {
+      args.push('-f', choice ? choice.id : 'bv*+ba/b', '--merge-output-format', out);
+      if (meta) args.push('--embed-metadata', '--embed-chapters', ...(out === 'webm' ? [] : ['--embed-thumbnail']));
+      if ($('subs').checked) args.push('--write-subs', '--sub-langs', 'en.*,en', '--embed-subs');
+      label = `Video · ${choice ? choice.label : 'best'} · ${out.toUpperCase()}`;
+    }
+    const url = analyzed.url;
+    analyzed = null;
+    $('picker').hidden = true;
+    $('url').value = '';
+    await startDownload(url, args, label);
+  });
+
+  async function startDownload(url, args, label) {
+    args.push('--', url);
+    const doc = await col.insert({ url, mode, label, status: 'starting', files: [], playlist: false });
+    downloads.unshift(doc);
+    render();
+    try {
+      const task = await wd.call('tools.run', { tool: 'yt-dlp', args });
+      Object.assign(doc, await col.update(doc._id, { status: 'running', taskId: task.id }));
+      track(doc);
+    } catch (err) {
+      Object.assign(doc, await col.update(doc._id, { status: 'failed', error: err.message }));
+      render();
+    }
+  }
+
   $('form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const url = $('url').value.trim();
     if (!/^https?:\/\//i.test(url)) { wd.ui.toast('Paste a full http(s) link', 'error'); return; }
     if (!(await checkTools())) return;
+    // Single videos: let the user pick the exact quality. Playlists use the quick presets below.
+    if (!$('playlist').checked) { await analyze(url); return; }
     const { args, label } = buildArgs(url);
     // "--" stops option parsing so a URL can never be read as a yt-dlp flag.
     args.push('--', url);
@@ -243,6 +369,12 @@
     render();
   };
   $('openFolder').onclick = () => wd.files.openFolder().catch((e) => wd.ui.toast(e.message, 'error'));
+
+  // Playlists download with quick presets; single links go through the format picker.
+  $('playlist').addEventListener('change', () => {
+    $('go').textContent = $('playlist').checked ? 'Download playlist' : 'Get formats';
+    setMode(mode);
+  });
 
   // ------------------------------------------------------------------- init
   (async () => {

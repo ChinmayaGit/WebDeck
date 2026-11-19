@@ -88,12 +88,57 @@
     /** Server-side fetch without CORS limits. Requires "net". */
     net: {
       fetch: (url, opts) => call('net.fetch', Object.assign({ url }, opts || {})).then(wrapResponse),
+      /**
+       * Streams a file to ~/Downloads/WebDeck/<App>/ (needs "net" + "files"). No size limit.
+       * opts: {name, subdir, onProgress({received,total}), onStart(d)}. Resolves with {path, name, status}.
+       */
+      download: async (url, opts) => {
+        opts = opts || {};
+        let d = await call('net.download', { url, name: opts.name, subdir: opts.subdir });
+        if (opts.onStart) opts.onStart(d);
+        while (d.status === 'running') {
+          await sleep(400);
+          d = await call('downloads.get', { id: d.id });
+          if (opts.onProgress) opts.onProgress(d);
+        }
+        if (d.status !== 'done') throw Object.assign(new Error(d.error || 'Download ' + d.status), { code: d.status });
+        return d;
+      },
+      cancelDownload: (id) => call('downloads.cancel', { id }),
+    },
+
+    /** Terminal access (needs "shell"). Runs through the user's login shell; no TTY. */
+    shell: {
+      home: () => call('shell.home'),
+      run: async (command, opts) => {
+        opts = opts || {};
+        let task = await call('shell.run', { command, cwd: opts.cwd });
+        if (opts.onStart) opts.onStart(task);
+        let cursor = 0;
+        const all = [];
+        for (;;) {
+          task = await call('tasks.get', { id: task.id, since: cursor });
+          cursor = task.cursor;
+          for (const line of task.lines) { all.push(line); if (opts.onLine) opts.onLine(line); }
+          if (task.status !== 'running') break;
+          await sleep(opts.pollMs || 250);
+        }
+        task.lines = all;
+        return task;
+      },
+      cancel: (taskId) => call('tasks.cancel', { id: taskId }),
     },
 
     /** Requires "files". */
     files: {
       /** Native picker. Returns [{id, name, size, path, ext, url}] — url is same-origin, safe for <img>/canvas. */
       pick: (opts) => call('files.pick', opts || {}),
+      /** Pick a folder; returns {path, name, files:[…]} filtered by opts.extensions. Access is remembered. */
+      pickFolder: (opts) => call('files.pickFolder', opts || {}),
+      /** List files in a remembered folder (or the app's downloads folder). */
+      list: (path, opts) => call('files.list', Object.assign({ path }, opts || {})),
+      /** Same-origin URL for a file the app may read (picked with remember, in a remembered folder, or saved by the app). */
+      url: (path) => call('files.url', { path }),
       /** Registers a File/Blob (e.g. from drag & drop) with the host; returns the same shape as pick(). */
       upload: async (file) => {
         const res = await fetch('/__webdeck/upload?name=' + encodeURIComponent(file.name || 'file'), {
@@ -150,12 +195,12 @@
         }
       },
       /**
-       * Runs a tool in this app's downloads folder. Streams output lines to opts.onLine.
+       * Runs a tool in this app's downloads folder (or opts.subdir inside it). Streams output lines to opts.onLine.
        * Resolves with {status, exitCode, outputFiles, lines}. opts.onStart receives the task (for cancel()).
        */
       run: async (tool, args, opts) => {
         opts = opts || {};
-        let task = await call('tools.run', { tool, args: args || [] });
+        let task = await call('tools.run', { tool, args: args || [], subdir: opts.subdir });
         if (opts.onStart) opts.onStart(task);
         let cursor = 0;
         const all = [];
@@ -174,6 +219,28 @@
         return task;
       },
       cancel: (taskId) => call('tasks.cancel', { id: taskId }),
+    },
+
+    /** Device Link: paired WebDeck devices on the local network. Requires "link". */
+    link: {
+      status: () => call('link.status'),
+      enable: (enabled) => call('link.enable', { enabled: enabled !== false }),
+      setName: (name) => call('link.setName', { name }),
+      peers: () => call('link.peers'),
+      pairCode: () => call('link.pairCode'),
+      pair: (addr, code, port) => call('link.pair', { addr, code, port }),
+      unpair: (id) => call('link.unpair', { id }),
+      send: (peer, channel, payload) => call('link.send', { peer, channel, payload }),
+      sendFile: (peer, path) => call('link.sendFile', { peer, path }),
+      inbox: (opts) => call('link.inbox', opts || {}),
+      clearInbox: (channel) => call('link.clearInbox', { channel }),
+      receivedDir: () => call('link.receivedDir'),
+      clipboard: {
+        history: () => call('link.clipboard', { action: 'history' }),
+        setSync: (enabled) => call('link.clipboard', { action: 'setSync', enabled }),
+        share: (text) => call('link.clipboard', { action: 'share', text }),
+        copy: (text) => call('link.clipboard', { action: 'copy', text }),
+      },
     },
 
     /** Background jobs declared in webdeck.json. Requires "jobs". */

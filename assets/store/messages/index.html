@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Messages</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>.chat{display:grid;grid-template-columns:220px 1fr;gap:12px;height:calc(100vh - 260px);min-height:360px}@media(max-width:700px){.chat{grid-template-columns:1fr;height:auto}}.peers .wd-item{cursor:pointer}.peers .on{border-color:var(--wd-accent)}.thread{display:flex;flex-direction:column;background:var(--wd-surface);border:1px solid var(--wd-border);border-radius:12px;overflow:hidden}.msgs{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:6px;min-height:240px}.b{max-width:75%;padding:8px 12px;border-radius:14px;white-space:pre-wrap;word-break:break-word}.b.in{background:var(--wd-surface-2);align-self:flex-start}.b.out{background:var(--wd-accent-strong);color:#fff;align-self:flex-end}.b small{display:block;opacity:.6;font-size:10px;margin-top:2px}.compose{display:flex;gap:8px;padding:10px;border-top:1px solid var(--wd-border)}</style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:960px">
+    <div class="wd-header"><div class="wd-icon">💬</div><div><h1>Messages</h1><div class="wd-sub">Device Link · your devices on this Wi-Fi</div></div></div>
+    <div id="setup" style="margin-bottom:14px"></div>
+    <div id="main"></div>
+  </div>
+  <script src="linkkit.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

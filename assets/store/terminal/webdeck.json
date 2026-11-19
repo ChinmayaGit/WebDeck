@@ -1,0 +1,12 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "version": "1.0.0",
+  "description": "Run shell commands without leaving WebDeck: build and start the repos you sideload, run git, npm, python and more. Uses your login shell with colors, cd, command history, tabs and Ctrl+C. Full-screen programs like vim or top need a real terminal.",
+  "category": "Developer",
+  "icon": "terminal",
+  "color": "#111827",
+  "permissions": ["shell"],
+  "platforms": ["macos", "windows", "linux"],
+  "author": "WebDeck"
+}

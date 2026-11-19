@@ -144,6 +144,22 @@ table.wd-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 dialog.wd-dialog { background: var(--wd-surface); color: var(--wd-text); border: 1px solid var(--wd-border); border-radius: 14px; padding: 20px; width: min(520px, calc(100vw - 32px)); }
 dialog.wd-dialog::backdrop { background: rgba(1, 4, 9, .7); }
 
+/* Multi-tool apps: tool list + panel */
+.wd-toolkit { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
+.wd-toollist { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 1px; max-height: calc(100vh - 24px); overflow: auto; }
+.wd-toollist .wd-group { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; font-weight: 700; color: var(--wd-muted); margin: 12px 10px 4px; }
+.wd-toollist .wd-group:first-child { margin-top: 0; }
+.wd-toollist button { text-align: left; background: transparent; border: 0; color: var(--wd-text); padding: 7px 10px; border-radius: 7px; font: 13px var(--wd-font); cursor: pointer; }
+.wd-toollist button:hover { background: var(--wd-surface-2); }
+.wd-toollist button[aria-current="true"] { background: rgba(56, 139, 253, .15); color: var(--wd-accent); font-weight: 600; }
+.wd-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 16px; }
+textarea.wd-input { resize: vertical; min-height: 120px; font-family: var(--wd-mono); font-size: 12px; line-height: 1.5; }
+@media (max-width: 720px) {
+  .wd-toolkit { grid-template-columns: 1fr; }
+  .wd-toollist { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
+  .wd-toollist .wd-group { width: 100%; margin: 8px 4px 2px; }
+}
+
 @media (max-width: 560px) {
   .wd-app { padding: 16px 14px 40px; }
   h1 { font-size: 19px; }

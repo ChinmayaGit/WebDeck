@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Music</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    body { padding-bottom: 96px; }
+    .track { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+    .track:hover { background: var(--wd-surface-2); }
+    .track.playing { background: rgba(225,29,72,.14); }
+    .track .n { color: var(--wd-muted); font-size: 12px; text-align: center; }
+    .heart { background: none; border: 0; cursor: pointer; font-size: 15px; color: var(--wd-muted); }
+    .heart.on { color: #e11d48; }
+    .albums { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+    .album { cursor: pointer; }
+    .album img, .album .ph { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--wd-surface-2); display: grid; place-items: center; font-size: 40px; }
+    .album .t { font-size: 13px; font-weight: 600; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .player { position: fixed; left: 0; right: 0; bottom: 0; background: var(--wd-surface); border-top: 1px solid var(--wd-border); padding: 10px 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: center; z-index: 10; }
+    .player .ctl { display: flex; gap: 6px; align-items: center; justify-content: center; }
+    .player .ctl button { background: none; border: 0; color: var(--wd-text); font-size: 18px; cursor: pointer; padding: 6px; border-radius: 50%; }
+    .player .ctl .play { background: var(--wd-text); color: var(--wd-bg); width: 40px; height: 40px; font-size: 16px; }
+    .player .ctl .on { color: #e11d48; }
+    .seek { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--wd-muted); }
+    .seek input { flex: 1; }
+    @media (max-width: 700px) { .player { grid-template-columns: 1fr; gap: 6px; } .player .side { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1100px">
+    <div class="wd-header">
+      <div class="wd-icon">🎵</div>
+      <div><h1>Music</h1><div class="wd-sub" id="sub">Your music and free music from the Internet Archive</div></div>
+      <div class="wd-spacer"></div>
+      <div class="wd-tabs"><button class="wd-tab" data-tab="library" aria-selected="true">My music</button><button class="wd-tab" data-tab="favs" aria-selected="false">Favorites</button><button class="wd-tab" data-tab="free" aria-selected="false">Free music</button></div>
+    </div>
+    <section id="library">
+      <div class="wd-row" style="margin-bottom:12px"><input class="wd-input wd-grow" id="filter" placeholder="Filter songs…" style="max-width:320px">
+        <div class="wd-spacer"></div><button class="wd-btn" id="addFolder">Add folder</button><button class="wd-btn" id="addFiles">Add files</button><button class="wd-btn wd-btn-primary" id="playAll">▶ Play all</button></div>
+      <div id="tracks"></div>
+    </section>
+    <section id="favs" hidden><div id="favTracks"></div></section>
+    <section id="free" hidden>
+      <form id="fForm" class="wd-row" style="margin-bottom:10px"><input class="wd-input wd-grow" id="fq" placeholder="Search artists, genres or albums, e.g. jazz, lo-fi, Grateful Dead…">
+        <select class="wd-select" id="fcol" style="width:auto"><option value="all">All open audio</option><option value="netlabels">Netlabels</option><option value="etree">Live concerts</option><option value="opensource_audio">Community audio</option><option value="audio_music">Music & arts</option></select>
+        <button class="wd-btn wd-btn-primary">Search</button></form>
+      <div id="freeOut"><div class="wd-empty"><div class="wd-empty-icon">🎶</div>Millions of free, legal recordings to stream or download.</div></div>
+    </section>
+  </div>
+
+  <div class="player">
+    <div class="side wd-row" style="min-width:0"><div style="min-width:0"><div class="wd-ellipsis" id="npTitle" style="font-weight:600">Nothing playing</div><div class="wd-ellipsis wd-small wd-muted" id="npSub"></div></div></div>
+    <div>
+      <div class="ctl"><button id="shuffle" title="Shuffle">🔀</button><button id="prev">⏮</button><button class="play" id="play">▶</button><button id="next">⏭</button><button id="repeat" title="Repeat">🔁</button></div>
+      <div class="seek"><span id="cur">0:00</span><input type="range" id="seek" min="0" max="1000" value="0"><span id="dur">0:00</span></div>
+    </div>
+    <div class="side wd-row" style="justify-content:flex-end"><span>🔈</span><input type="range" id="vol" min="0" max="100" value="80" style="width:110px"></div>
+  </div>
+  <audio id="audio" preload="metadata"></audio>
+  <script src="app.js"></script>
+</body>
+</html>
