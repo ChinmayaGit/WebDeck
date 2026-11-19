@@ -1,0 +1,12 @@
+{
+  "id": "free-games",
+  "name": "Free Games",
+  "version": "1.0.0",
+  "description": "Every current free-to-keep game giveaway on Epic, Steam, GOG, itch.io, consoles and mobile in one place, with notifications when new ones appear on the stores you care about. Data from GamerPower.",
+  "category": "Trackers",
+  "icon": "game",
+  "color": "#6366F1",
+  "permissions": ["net", "notify", "jobs"],
+  "jobs": [{ "id": "check-giveaways", "title": "Check for new free games", "every": "6h" }],
+  "author": "WebDeck"
+}

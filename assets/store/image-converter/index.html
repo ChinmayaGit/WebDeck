@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Converter</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+    .opt + .opt { margin-top: 14px; }
+    .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .thumb { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+    .thumb .pic { aspect-ratio: 4 / 3; background: #0b0f14; position: relative; }
+    .thumb .pic img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .thumb .meta { padding: 8px 10px; font-size: 12px; }
+    .thumb .x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; }
+    .thumb .state { margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">🖼️</div>
+      <div>
+        <h1>Image Converter</h1>
+        <div class="wd-sub">JPEG · PNG · WebP · resize · batch · offline</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="openFolder">Open output folder</button>
+    </div>
+
+    <div class="layout">
+      <div class="wd-card">
+        <div class="opt">
+          <label class="wd-label" for="format">Convert to</label>
+          <select class="wd-select" id="format">
+            <option value="image/jpeg">JPEG (.jpg)</option>
+            <option value="image/png">PNG (.png)</option>
+            <option value="image/webp">WebP (.webp)</option>
+          </select>
+          <div id="webpNote" class="wd-small wd-muted" style="margin-top:6px" hidden></div>
+        </div>
+        <div class="opt" id="qualityRow">
+          <label class="wd-label" for="quality">Quality: <span id="qualityVal">85</span>%</label>
+          <input type="range" id="quality" min="10" max="100" value="85">
+        </div>
+        <div class="opt">
+          <label class="wd-label" for="resize">Resize</label>
+          <select class="wd-select" id="resize">
+            <option value="none">Keep original size</option>
+            <option value="max">Fit within max size</option>
+            <option value="percent">Scale by percent</option>
+          </select>
+        </div>
+        <div class="opt" id="maxRow" hidden>
+          <div class="wd-row">
+            <div class="wd-grow"><label class="wd-label" for="maxW">Max width</label><input class="wd-input" id="maxW" type="number" min="1" value="1920"></div>
+            <div class="wd-grow"><label class="wd-label" for="maxH">Max height</label><input class="wd-input" id="maxH" type="number" min="1" value="1920"></div>
+          </div>
+        </div>
+        <div class="opt" id="pctRow" hidden>
+          <label class="wd-label" for="pct">Scale: <span id="pctVal">50</span>%</label>
+          <input type="range" id="pct" min="5" max="200" value="50">
+        </div>
+        <div class="opt" id="bgRow">
+          <label class="wd-label" for="bg">Background for transparent areas</label>
+          <input type="color" id="bg" value="#ffffff" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--wd-border);background:var(--wd-surface-2)">
+        </div>
+        <div class="opt">
+          <label class="wd-row wd-small"><input type="checkbox" id="subfolder" checked> Save into a dated subfolder</label>
+        </div>
+        <div class="opt">
+          <button class="wd-btn wd-btn-primary" id="convert" style="width:100%" disabled>Convert</button>
+        </div>
+      </div>
+
+      <div class="wd-stack">
+        <div class="wd-drop" id="drop">
+          <div style="font-size:28px">⬇️</div>
+          <div style="margin:6px 0 12px">Drop images here or</div>
+          <button class="wd-btn wd-btn-primary" id="pick">Choose images</button>
+        </div>
+        <div class="wd-row">
+          <div class="wd-muted wd-small" id="summary"></div>
+          <div class="wd-spacer"></div>
+          <button class="wd-btn wd-btn-sm wd-btn-ghost" id="clear" hidden>Clear all</button>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

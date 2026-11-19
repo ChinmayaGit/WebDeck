@@ -1,3 +1,4 @@
+import '../../runtime/manifest.dart';
 import 'backend_requirement.dart';
 
 class InstalledApp {
@@ -16,6 +17,14 @@ class InstalledApp {
   final DateTime installedAt;
   final int sizeBytes;
 
+  /// Present for WebDeck runtime apps (bundles shipping a `webdeck.json`).
+  final WebDeckManifest? manifest;
+
+  /// Where the app came from: 'store' for catalog installs, otherwise sideloaded.
+  final String source;
+
+  bool get isRuntimeApp => manifest != null;
+
   const InstalledApp({
     required this.id,
     required this.name,
@@ -31,6 +40,8 @@ class InstalledApp {
     this.backendRequirement,
     required this.installedAt,
     required this.sizeBytes,
+    this.manifest,
+    this.source = 'sideload',
   });
 
   Map<String, dynamic> toJson() => {
@@ -48,6 +59,8 @@ class InstalledApp {
         'backendRequirement': backendRequirement?.toJson(),
         'installedAt': installedAt.toIso8601String(),
         'sizeBytes': sizeBytes,
+        if (manifest != null) 'manifest': manifest!.toJson(),
+        'source': source,
       };
 
   factory InstalledApp.fromJson(Map<String, dynamic> json) {
@@ -72,7 +85,18 @@ class InstalledApp {
           ? DateTime.parse(json['installedAt'] as String)
           : DateTime.now(),
       sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+      manifest: _parseManifest(json['manifest']),
+      source: json['source'] as String? ?? 'sideload',
     );
+  }
+
+  static WebDeckManifest? _parseManifest(Object? raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    try {
+      return WebDeckManifest.fromJson(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
   InstalledApp copyWith({
@@ -90,6 +114,8 @@ class InstalledApp {
     Object? backendRequirement = _unset,
     DateTime? installedAt,
     int? sizeBytes,
+    Object? manifest = _unset,
+    String? source,
   }) {
     return InstalledApp(
       id: id ?? this.id,
@@ -108,6 +134,8 @@ class InstalledApp {
           : backendRequirement as BackendRequirement?,
       installedAt: installedAt ?? this.installedAt,
       sizeBytes: sizeBytes ?? this.sizeBytes,
+      manifest: identical(manifest, _unset) ? this.manifest : manifest as WebDeckManifest?,
+      source: source ?? this.source,
     );
   }
 }

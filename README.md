@@ -6,6 +6,29 @@ It installs apps from GitHub, zip URLs, or a local folder, then runs them on a l
 
 ---
 
+## Store & runtime apps
+
+WebDeck opens on four tabs: **Apps**, **Store**, **Activity** and **Settings**.
+
+Store apps are static web apps with a `webdeck.json` manifest. They have no backend of their own: WebDeck **is** their backend. Through `window.webdeck` each app gets:
+
+| Service | What the app gets |
+| :--- | :--- |
+| `db` / `kv` | Private document + key/value storage (`appdata/<id>/`), no database server |
+| `net` | Server-side fetch without CORS limits (for trackers and scrapers) |
+| `files` | Native file picker, save to `~/Downloads/WebDeck/<App>/`, reveal/open |
+| `notify` | Activity inbox + desktop notifications |
+| `jobs` | Scheduled background checks run in a hidden WebView |
+| `tools` | Managed **yt-dlp**, **FFmpeg**, **Pandoc** (auto-installed on request) and LibreOffice |
+
+Built-in apps (`assets/store/`): **Media Downloader** (video + music), **Price Tracker** (with price history), **Free Games**, **Ticket Watcher**, **Image Converter** and **Doc Converter**. More can be added through remote catalogs in Settings → Store sources, with no WebDeck release needed.
+
+To build an app, see [docs/building-apps.md](docs/building-apps.md).
+
+Sideloading arbitrary web projects (GitHub / zip / folder, companion backends, Database Studio) still works. Turn on **Settings → Developer mode** to use it.
+
+---
+
 ## What it does
 
 | Capability | Description |

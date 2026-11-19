@@ -8,6 +8,7 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_static/shelf_static.dart';
 import '../models/backend_requirement.dart';
 import '../models/installed_app.dart';
+import '../../runtime/runtime_host.dart';
 
 class RunningAppInstance {
   final String appId;
@@ -25,6 +26,9 @@ class RunningAppInstance {
 }
 
 class LocalServerService {
+  /// Provides `/__webdeck/*` (storage, net, files, jobs, tools) to runtime apps.
+  RuntimeHost? runtimeHost;
+
   final Map<String, RunningAppInstance> _runningInstances = {};
   final Map<String, int> _assignedPorts = {};
   final Map<String, List<Process>> _companionProcesses = {};
@@ -718,9 +722,25 @@ class LocalServerService {
     }
 
     // Middleware for CORS, caching, and cross-origin persistence
-    final handler = const Pipeline()
-        .addMiddleware(_corsMiddleware())
-        .addHandler(spaHandler);
+    final Handler handler;
+    final manifest = app.manifest;
+    final runtime = runtimeHost;
+    if (manifest != null && runtime != null) {
+      // Runtime apps: the WebDeck API is same-origin only (no permissive CORS),
+      // and every HTML page gets the SDK injected.
+      final api = runtime.handlerFor(app, manifest);
+      final pages = const Pipeline()
+          .addMiddleware(_corsMiddleware())
+          .addMiddleware(_injectSdkMiddleware())
+          .addHandler(spaHandler);
+      handler = (Request request) => request.url.path.startsWith('__webdeck/')
+          ? api(request)
+          : pages(request);
+    } else {
+      handler = const Pipeline()
+          .addMiddleware(_corsMiddleware())
+          .addHandler(spaHandler);
+    }
 
     // 5. Bind to deterministic port to keep IndexedDB and LocalStorage persistent
     HttpServer server;
@@ -801,6 +821,35 @@ class LocalServerService {
       default:
         return mime.lookupMimeType(path);
     }
+  }
+
+  static const _sdkTag = '<script src="/__webdeck/sdk.js"></script>';
+
+  /// Inserts the WebDeck SDK as the first script of every HTML document.
+  static String injectSdk(String html) {
+    if (html.contains(_sdkTag)) return html;
+    final head = RegExp(r'<head[^>]*>', caseSensitive: false).firstMatch(html);
+    if (head != null) {
+      return html.replaceRange(head.end, head.end, _sdkTag);
+    }
+    return '$_sdkTag$html';
+  }
+
+  static Middleware _injectSdkMiddleware() {
+    return (Handler inner) {
+      return (Request request) async {
+        final response = await inner(request);
+        final type = response.headers['content-type'] ?? '';
+        if (response.statusCode != 200 || !type.contains('text/html') || request.method != 'GET') {
+          return response;
+        }
+        final html = await response.readAsString();
+        final headers = Map<String, String>.from(response.headers)
+          ..remove('content-length')
+          ..['cache-control'] = 'no-cache';
+        return Response.ok(injectSdk(html), headers: headers);
+      };
+    };
   }
 
   static Middleware _corsMiddleware() {

@@ -13,6 +13,8 @@ import 'package:webdeck/ui/features/catalog/view_models/catalog_view_model.dart'
 import 'package:webdeck/ui/features/catalog/views/app_card.dart';
 import 'package:webdeck/ui/features/catalog/views/home_screen.dart';
 import 'package:webdeck/ui/features/catalog/views/setup_requirement_dialog.dart';
+import 'package:webdeck/runtime/settings_service.dart';
+import 'package:webdeck/ui/features/shell/app_launcher.dart';
 
 void main() {
   testWidgets('WebDeck HomeScreen smoke test', (WidgetTester tester) async {
@@ -41,10 +43,15 @@ void main() {
       await viewModel.loadApps();
     });
 
+    final settings = SettingsService(() async => tempDir!);
+    final nav = ShellNavigation();
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: viewModel),
+          ChangeNotifierProvider.value(value: settings),
+          ChangeNotifierProvider.value(value: nav),
         ],
         child: const MaterialApp(
           home: HomeScreen(),
@@ -54,9 +61,19 @@ void main() {
 
     await tester.pump();
 
-    // Verify header and empty state
+    // Default: store-first empty state, sideloading hidden.
     expect(find.text('WebDeck'), findsOneWidget);
-    expect(find.text('Your WebDeck Shelf is Empty'), findsOneWidget);
+    expect(find.text('No apps yet'), findsOneWidget);
+    expect(find.text('Browse the Store'), findsOneWidget);
+    expect(find.text('Add from GitHub'), findsNothing);
+    expect(find.text('Install App'), findsNothing);
+
+    await tester.tap(find.text('Browse the Store'));
+    expect(nav.value, ShellNavigation.store);
+
+    // Developer mode brings back sideloading.
+    await tester.runAsync(() => settings.setDeveloperMode(true));
+    await tester.pump();
     expect(find.text('Add from GitHub'), findsOneWidget);
     expect(find.text('Install App'), findsOneWidget);
   });

@@ -1,0 +1,11 @@
+{
+  "apps": [
+    "media-downloader",
+    "price-tracker",
+    "free-games",
+    "ticket-watcher",
+    "image-converter",
+    "doc-converter"
+  ],
+  "featured": ["media-downloader", "price-tracker", "free-games"]
+}

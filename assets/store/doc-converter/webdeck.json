@@ -1,0 +1,12 @@
+{
+  "id": "doc-converter",
+  "name": "Doc Converter",
+  "version": "1.0.0",
+  "description": "Convert documents between Word, Markdown, HTML, ODT, RTF, EPUB and plain text with Pandoc, and to PDF (plus Excel/PowerPoint files) with LibreOffice. Everything runs locally.",
+  "category": "Converters",
+  "icon": "doc",
+  "color": "#0EA5E9",
+  "permissions": ["tools", "files", "notify"],
+  "platforms": ["macos", "windows", "linux"],
+  "author": "WebDeck"
+}

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
@@ -9,6 +10,8 @@ import '../services/backup_service.dart';
 import '../services/github_service.dart';
 import '../services/local_server_service.dart';
 import '../services/storage_service.dart';
+import '../../runtime/app_data_store.dart';
+import '../../runtime/manifest.dart';
 
 class AppRepository {
   final GitHubService _gitHubService;
@@ -29,7 +32,11 @@ class AppRepository {
         _serverService = serverService ?? LocalServerService(),
         _backupService = backupService ?? BackupService(storageService: storageService);
 
+  /// Per-app runtime storage; cleared when an app is uninstalled.
+  AppDataStore? dataStore;
+
   LocalServerService get serverService => _serverService;
+  StorageService get storageService => _storageService;
   BackupService get backupService => _backupService;
 
   Future<List<InstalledApp>> getInstalledApps() async {
@@ -107,6 +114,8 @@ class AppRepository {
 
   /// Checks if an app has or needs backend requirements detection
   Future<BackendRequirement?> resolveBackendRequirement(InstalledApp app) async {
+    // Runtime apps never ship their own backend: WebDeck is their backend.
+    if (app.isRuntimeApp) return null;
     final targetDir = Directory(app.installedPath);
     if (!await targetDir.exists()) return null;
 
@@ -127,6 +136,72 @@ class AppRepository {
   Future<void> uninstallApp(String appId) async {
     await _serverService.stopAppServer(appId);
     await _storageService.deleteApp(appId);
+    await dataStore?.deleteAppData(appId);
+  }
+
+  /// Installs (or updates in place) a WebDeck runtime app from its files.
+  /// [files] maps bundle-relative paths to bytes and must contain webdeck.json.
+  /// App data in `appdata/<id>` is untouched, so updates keep user data.
+  Future<InstalledApp> installRuntimeBundle({
+    required Map<String, List<int>> files,
+    List<int>? iconPng,
+    String source = 'store',
+  }) async {
+    final manifestBytes = files[WebDeckManifest.fileName];
+    if (manifestBytes == null) throw StateError('Bundle is missing webdeck.json');
+    final manifest = WebDeckManifest.fromJson(
+      jsonDecode(utf8.decode(manifestBytes)) as Map<String, dynamic>,
+    );
+    if (!files.containsKey(manifest.entry)) {
+      throw StateError('Bundle is missing its entry page "${manifest.entry}"');
+    }
+
+    final appsDir = await _storageService.getAppsDirectory();
+    final target = Directory(p.join(appsDir.path, manifest.id));
+    final staging = Directory('${target.path}.staging');
+    if (await staging.exists()) await staging.delete(recursive: true);
+    await staging.create(recursive: true);
+
+    var size = 0;
+    for (final entry in files.entries) {
+      final rel = p.normalize(entry.key);
+      if (p.isAbsolute(rel) || rel.startsWith('..')) {
+        throw StateError('Unsafe path in bundle: ${entry.key}');
+      }
+      final file = File(p.join(staging.path, rel));
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(entry.value, flush: true);
+      size += entry.value.length;
+    }
+    String? iconPath;
+    if (iconPng != null) {
+      final iconFile = File(p.join(staging.path, '.webdeck-icon.png'));
+      await iconFile.writeAsBytes(iconPng, flush: true);
+      iconPath = p.join(target.path, '.webdeck-icon.png');
+    }
+
+    await _serverService.stopAppServer(manifest.id);
+    if (await target.exists()) await target.delete(recursive: true);
+    await staging.rename(target.path);
+
+    final existing = (await _storageService.loadRegistry()).where((a) => a.id == manifest.id).firstOrNull;
+    final app = InstalledApp(
+      id: manifest.id,
+      name: manifest.name,
+      description: manifest.description,
+      version: manifest.version,
+      repoUrl: '$source://${manifest.id}',
+      localIconPath: iconPath,
+      installedPath: target.path,
+      entryHtml: manifest.entry,
+      framework: 'WebDeck App',
+      installedAt: existing?.installedAt ?? DateTime.now(),
+      sizeBytes: size,
+      manifest: manifest,
+      source: source,
+    );
+    await _storageService.saveOrUpdateApp(app);
+    return app;
   }
 
   /// Updates an app's custom display icon from an image file on the user's computer

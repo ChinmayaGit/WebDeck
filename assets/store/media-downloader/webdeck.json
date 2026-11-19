@@ -1,0 +1,12 @@
+{
+  "id": "media-downloader",
+  "name": "Media Downloader",
+  "version": "1.0.0",
+  "description": "Download videos, or extract music as MP3/M4A/FLAC, from YouTube and 1,000+ other sites. Supports quality choice, playlists and embedded cover art. WebDeck installs yt-dlp and FFmpeg for you on first use.",
+  "category": "Downloaders",
+  "icon": "download",
+  "color": "#EF4444",
+  "permissions": ["tools", "files", "notify"],
+  "platforms": ["macos", "windows", "linux"],
+  "author": "WebDeck"
+}

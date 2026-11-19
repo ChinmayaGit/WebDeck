@@ -1,11 +1,15 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../../../data/models/backend_requirement.dart';
 import '../../../../data/models/installed_app.dart';
 import '../../../core/theme.dart';
+import '../../../../runtime/settings_service.dart';
+import '../../shell/app_launcher.dart';
 import '../../player/views/webview_player_screen.dart';
 import '../view_models/catalog_view_model.dart';
 import 'app_card.dart';
@@ -22,12 +26,17 @@ class HomeScreen extends StatelessWidget {
       barrierDismissible: !viewModel.isInstalling,
       builder: (ctx) => InstallAppDialog(
         viewModel: viewModel,
-        onInstalledLaunch: (installedApp) => _launchApp(context, viewModel, installedApp),
+        onInstalledLaunch: (installedApp) =>
+            _launchApp(context, viewModel, installedApp),
       ),
     );
   }
 
-  void _launchApp(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
+  void _launchApp(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
     // Check if app has companion backend or database requirements
     final req = await viewModel.resolveBackendRequirement(app);
     final effectiveApp = req != null
@@ -35,7 +44,8 @@ class HomeScreen extends StatelessWidget {
         : app;
 
     if (req != null && req.hasRequirements) {
-      final hasRealBackend = req.requiresPython ||
+      final hasRealBackend =
+          req.requiresPython ||
           req.requiresNode ||
           req.requiresDotnet ||
           req.backendPort != null ||
@@ -56,7 +66,11 @@ class HomeScreen extends StatelessWidget {
           await viewModel.startCompanionBackend(effectiveApp, requirement: req);
           for (var i = 0; i < 40; i++) {
             await Future.delayed(const Duration(milliseconds: 500));
-            isPortActive = await _areCompanionPortsReady(viewModel, app.id, req);
+            isPortActive = await _areCompanionPortsReady(
+              viewModel,
+              app.id,
+              req,
+            );
             if (isPortActive) break;
           }
         } catch (_) {}
@@ -70,7 +84,8 @@ class HomeScreen extends StatelessWidget {
             app: effectiveApp,
             requirement: req,
             viewModel: viewModel,
-            onProceedToLaunch: () => _executeLaunch(context, viewModel, effectiveApp),
+            onProceedToLaunch: () =>
+                _executeLaunch(context, viewModel, effectiveApp),
           ),
         );
         return;
@@ -128,7 +143,11 @@ class HomeScreen extends StatelessWidget {
     return true;
   }
 
-  void _executeLaunch(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
+  void _executeLaunch(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
     try {
       final instance = await viewModel.launchApp(app);
       if (!context.mounted) return;
@@ -152,14 +171,22 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  void _openInExternalBrowser(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
+  void _openInExternalBrowser(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
     final req = await viewModel.resolveBackendRequirement(app);
     final effectiveApp = req != null && app.backendRequirement == null
         ? app.copyWith(backendRequirement: req)
         : app;
 
     if (req != null && req.hasRequirements) {
-      final isPortActive = await _areCompanionPortsReady(viewModel, app.id, req);
+      final isPortActive = await _areCompanionPortsReady(
+        viewModel,
+        app.id,
+        req,
+      );
 
       if (!isPortActive) {
         if (!context.mounted) return;
@@ -169,7 +196,8 @@ class HomeScreen extends StatelessWidget {
             app: effectiveApp,
             requirement: req,
             viewModel: viewModel,
-            onProceedToLaunch: () => _executeOpenInExternalBrowser(viewModel, effectiveApp),
+            onProceedToLaunch: () =>
+                _executeOpenInExternalBrowser(viewModel, effectiveApp),
           ),
         );
         return;
@@ -180,7 +208,10 @@ class HomeScreen extends StatelessWidget {
     _executeOpenInExternalBrowser(viewModel, effectiveApp);
   }
 
-  void _executeOpenInExternalBrowser(CatalogViewModel viewModel, InstalledApp app) async {
+  void _executeOpenInExternalBrowser(
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
     final instance = await viewModel.launchApp(app);
     final uri = Uri.parse(instance.launchUrl);
     if (await canLaunchUrl(uri)) {
@@ -188,14 +219,21 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  void _onUpdateIcon(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
+  void _onUpdateIcon(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
     try {
       final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['png', 'jpg', 'jpeg', 'svg', 'ico', 'webp'],
       );
       if (result != null && result.path != null) {
-        final success = await viewModel.updateAppIcon(app.id, File(result.path!));
+        final success = await viewModel.updateAppIcon(
+          app.id,
+          File(result.path!),
+        );
         if (context.mounted && success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -207,14 +245,17 @@ class HomeScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update icon: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to update icon: $e')));
       }
     }
   }
 
-  void _onCheckUpdate(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
+  void _onCheckUpdate(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) async {
     final success = await viewModel.checkAndUpdateApp(app.id);
     if (context.mounted) {
       if (success) {
@@ -251,9 +292,8 @@ class HomeScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Backup export failed: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Backup export failed: $e')));
       }
     }
   }
@@ -277,21 +317,26 @@ class HomeScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Restore failed: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Restore failed: $e')));
       }
     }
   }
 
-  void _confirmUninstall(BuildContext context, CatalogViewModel viewModel, InstalledApp app) {
+  void _confirmUninstall(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: WebDeckTheme.surface,
         title: Text('Uninstall ${app.name}?'),
         content: Text(
-          'This will delete all sandboxed files from your local storage (${app.installedPath}).',
+          app.isRuntimeApp
+              ? 'The app and everything it saved (tracked items, history, settings) will be deleted. Files in your Downloads folder are kept.'
+              : 'This will delete all sandboxed files from your local storage (${app.installedPath}).',
         ),
         actions: [
           TextButton(
@@ -299,7 +344,9 @@ class HomeScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: WebDeckTheme.accentRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: WebDeckTheme.accentRed,
+            ),
             onPressed: () {
               Navigator.of(ctx).pop();
               viewModel.uninstallApp(app.id);
@@ -314,6 +361,9 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<CatalogViewModel>();
+    final devMode = context.select<SettingsService, bool>(
+      (s) => s.developerMode,
+    );
     final apps = viewModel.filteredApps;
 
     return Scaffold(
@@ -385,28 +435,44 @@ class HomeScreen extends StatelessWidget {
               ),
             ],
           ),
-          IconButton(
-            tooltip: 'Quick Demo',
-            onPressed: () => viewModel.installDemoApp(),
-            icon: const Icon(Icons.sports_esports, size: 20),
-          ),
+          if (devMode)
+            IconButton(
+              tooltip: 'Quick Demo',
+              onPressed: () => viewModel.installDemoApp(),
+              icon: const Icon(Icons.sports_esports, size: 20),
+            ),
           const SizedBox(width: 4),
-          Builder(
-            builder: (ctx) {
-              final isSmall = MediaQuery.sizeOf(ctx).width < 480;
-              return isSmall
-                  ? IconButton.filled(
-                      tooltip: 'Install App',
-                      onPressed: () => _showInstallDialog(context, viewModel),
-                      icon: const Icon(Icons.add, size: 18),
-                    )
-                  : ElevatedButton.icon(
-                      onPressed: () => _showInstallDialog(context, viewModel),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Install App'),
-                    );
-            },
-          ),
+          if (!devMode)
+            MediaQuery.sizeOf(context).width < 480
+                ? IconButton.filled(
+                    tooltip: 'Get Apps',
+                    onPressed: () => context.read<ShellNavigation>().value =
+                        ShellNavigation.store,
+                    icon: const Icon(Icons.storefront, size: 18),
+                  )
+                : ElevatedButton.icon(
+                    onPressed: () => context.read<ShellNavigation>().value =
+                        ShellNavigation.store,
+                    icon: const Icon(Icons.storefront, size: 18),
+                    label: const Text('Get Apps'),
+                  )
+          else
+            Builder(
+              builder: (ctx) {
+                final isSmall = MediaQuery.sizeOf(ctx).width < 480;
+                return isSmall
+                    ? IconButton.filled(
+                        tooltip: 'Install App',
+                        onPressed: () => _showInstallDialog(context, viewModel),
+                        icon: const Icon(Icons.add, size: 18),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: () => _showInstallDialog(context, viewModel),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Install App'),
+                      );
+              },
+            ),
           const SizedBox(width: 12),
         ],
       ),
@@ -422,7 +488,9 @@ class HomeScreen extends StatelessWidget {
                 child: TextField(
                   onChanged: viewModel.setSearchQuery,
                   decoration: InputDecoration(
-                    hintText: isNarrow ? 'Search apps...' : 'Search installed shelf apps...',
+                    hintText: isNarrow
+                        ? 'Search apps...'
+                        : 'Search installed shelf apps...',
                     prefixIcon: const Icon(Icons.search, size: 18),
                     contentPadding: const EdgeInsets.symmetric(vertical: 0),
                     suffixIcon: viewModel.searchQuery.isNotEmpty
@@ -448,7 +516,10 @@ class HomeScreen extends StatelessWidget {
                     value: viewModel.sortOption,
                     dropdownColor: WebDeckTheme.surface,
                     icon: const Icon(Icons.sort, size: 18),
-                    style: const TextStyle(fontSize: 12, color: WebDeckTheme.textPrimary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: WebDeckTheme.textPrimary,
+                    ),
                     onChanged: (opt) {
                       if (opt != null) viewModel.setSortOption(opt);
                     },
@@ -511,10 +582,15 @@ class HomeScreen extends StatelessWidget {
               );
 
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: const BoxDecoration(
                   color: WebDeckTheme.surface,
-                  border: Border(bottom: BorderSide(color: WebDeckTheme.border)),
+                  border: Border(
+                    bottom: BorderSide(color: WebDeckTheme.border),
+                  ),
                 ),
                 child: isNarrow
                     ? Column(
@@ -524,10 +600,7 @@ class HomeScreen extends StatelessWidget {
                           const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              sortWidget,
-                              viewModeWidget,
-                            ],
+                            children: [sortWidget, viewModeWidget],
                           ),
                         ],
                       )
@@ -563,17 +636,25 @@ class HomeScreen extends StatelessWidget {
                     avatar: Icon(
                       Icons.circle,
                       size: 10,
-                      color: viewModel.runningCount > 0 ? WebDeckTheme.accentGreen : WebDeckTheme.textSecondary,
+                      color: viewModel.runningCount > 0
+                          ? WebDeckTheme.accentGreen
+                          : WebDeckTheme.textSecondary,
                     ),
                     backgroundColor: WebDeckTheme.surface,
-                    selectedColor: WebDeckTheme.accentGreen.withValues(alpha: 0.25),
+                    selectedColor: WebDeckTheme.accentGreen.withValues(
+                      alpha: 0.25,
+                    ),
                     labelStyle: TextStyle(
                       fontSize: 12,
-                      color: viewModel.onlyRunning ? WebDeckTheme.accentGreen : WebDeckTheme.textSecondary,
+                      color: viewModel.onlyRunning
+                          ? WebDeckTheme.accentGreen
+                          : WebDeckTheme.textSecondary,
                       fontWeight: FontWeight.w600,
                     ),
                     side: BorderSide(
-                      color: viewModel.onlyRunning ? WebDeckTheme.accentGreen : WebDeckTheme.border,
+                      color: viewModel.onlyRunning
+                          ? WebDeckTheme.accentGreen
+                          : WebDeckTheme.border,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -589,7 +670,9 @@ class HomeScreen extends StatelessWidget {
                           viewModel.setSelectedFramework(selected ? fw : 'All');
                         },
                         backgroundColor: WebDeckTheme.surface,
-                        selectedColor: WebDeckTheme.primary.withValues(alpha: 0.25),
+                        selectedColor: WebDeckTheme.primary.withValues(
+                          alpha: 0.25,
+                        ),
                         labelStyle: TextStyle(
                           fontSize: 12,
                           color: (viewModel.selectedFramework ?? 'All') == fw
@@ -615,12 +698,12 @@ class HomeScreen extends StatelessWidget {
             child: viewModel.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : apps.isEmpty
-                    ? _buildEmptyState(context, viewModel)
-                    : viewModel.viewMode == ViewMode.grid
-                        ? _buildGridView(context, viewModel, apps)
-                        : viewModel.viewMode == ViewMode.list
-                            ? _buildListView(context, viewModel, apps)
-                            : _buildIconOnlyView(context, viewModel, apps),
+                ? _buildEmptyState(context, viewModel)
+                : viewModel.viewMode == ViewMode.grid
+                ? _buildGridView(context, viewModel, apps)
+                : viewModel.viewMode == ViewMode.list
+                ? _buildListView(context, viewModel, apps)
+                : _buildIconOnlyView(context, viewModel, apps),
           ),
         ],
       ),
@@ -640,18 +723,26 @@ class HomeScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: Container(
           padding: const EdgeInsets.all(8),
-          color: isSelected ? WebDeckTheme.primary.withValues(alpha: 0.2) : Colors.transparent,
+          color: isSelected
+              ? WebDeckTheme.primary.withValues(alpha: 0.2)
+              : Colors.transparent,
           child: Icon(
             icon,
             size: 18,
-            color: isSelected ? WebDeckTheme.primary : WebDeckTheme.textSecondary,
+            color: isSelected
+                ? WebDeckTheme.primary
+                : WebDeckTheme.textSecondary,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildGridView(BuildContext context, CatalogViewModel viewModel, List<InstalledApp> apps) {
+  Widget _buildGridView(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    List<InstalledApp> apps,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         int crossAxisCount = 1;
@@ -684,10 +775,12 @@ class HomeScreen extends StatelessWidget {
               onLaunch: () => _launchApp(context, viewModel, app),
               onStop: () => viewModel.stopApp(app.id),
               onUninstall: () => _confirmUninstall(context, viewModel, app),
-              onOpenBrowser: () => _openInExternalBrowser(context, viewModel, app),
+              onOpenBrowser: () =>
+                  _openInExternalBrowser(context, viewModel, app),
               onUpdateIcon: () => _onUpdateIcon(context, viewModel, app),
               onCheckUpdate: () => _onCheckUpdate(context, viewModel, app),
-              onBackendConsole: () => _openBackendConsole(context, viewModel, app),
+              onBackendConsole: () =>
+                  _openBackendConsole(context, viewModel, app),
             );
           },
         );
@@ -695,7 +788,11 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildListView(BuildContext context, CatalogViewModel viewModel, List<InstalledApp> apps) {
+  Widget _buildListView(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    List<InstalledApp> apps,
+  ) {
     return ListView.separated(
       padding: const EdgeInsets.all(20),
       itemCount: apps.length,
@@ -703,11 +800,15 @@ class HomeScreen extends StatelessWidget {
       itemBuilder: (context, index) {
         final app = apps[index];
         final isRunning = viewModel.isAppRunning(app.id);
-        final hasIcon = app.localIconPath != null && File(app.localIconPath!).existsSync();
+        final hasIcon =
+            app.localIconPath != null && File(app.localIconPath!).existsSync();
 
         return Card(
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
             leading: Container(
               width: 44,
               height: 44,
@@ -719,7 +820,10 @@ class HomeScreen extends StatelessWidget {
               child: hasIcon
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.file(File(app.localIconPath!), fit: BoxFit.cover),
+                      child: Image.file(
+                        File(app.localIconPath!),
+                        fit: BoxFit.cover,
+                      ),
                     )
                   : ClipRRect(
                       borderRadius: BorderRadius.circular(10),
@@ -728,8 +832,13 @@ class HomeScreen extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Center(
                           child: Text(
-                            app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                            app.name.isNotEmpty
+                                ? app.name[0].toUpperCase()
+                                : 'W',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                            ),
                           ),
                         ),
                       ),
@@ -740,13 +849,19 @@ class HomeScreen extends StatelessWidget {
                 Flexible(
                   child: Text(
                     app.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: WebDeckTheme.surfaceSubtle,
                     borderRadius: BorderRadius.circular(4),
@@ -754,17 +869,26 @@ class HomeScreen extends StatelessWidget {
                   ),
                   child: Text(
                     app.framework,
-                    style: const TextStyle(fontSize: 10, color: WebDeckTheme.primary, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: WebDeckTheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 if (app.backendRequirement?.hasRequirements == true) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFD29922).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFD29922).withValues(alpha: 0.35)),
+                      border: Border.all(
+                        color: const Color(0xFFD29922).withValues(alpha: 0.35),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -773,15 +897,19 @@ class HomeScreen extends StatelessWidget {
                           app.backendRequirement!.requiresDotnet
                               ? Icons.dns
                               : (app.backendRequirement!.requiresPython
-                                  ? Icons.terminal
-                                  : Icons.storage),
+                                    ? Icons.terminal
+                                    : Icons.storage),
                           size: 10,
                           color: const Color(0xFFD29922),
                         ),
                         const SizedBox(width: 3),
                         Text(
                           app.backendRequirement!.runtimeBadgeLabel,
-                          style: const TextStyle(fontSize: 9, color: Color(0xFFD29922), fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Color(0xFFD29922),
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ],
                     ),
@@ -790,32 +918,50 @@ class HomeScreen extends StatelessWidget {
                 if (isRunning) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: WebDeckTheme.accentGreen.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: WebDeckTheme.accentGreen.withValues(alpha: 0.4)),
+                      border: Border.all(
+                        color: WebDeckTheme.accentGreen.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: const Text(
                       'RUNNING',
-                      style: TextStyle(fontSize: 9, color: WebDeckTheme.accentGreen, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: WebDeckTheme.accentGreen,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
               ],
             ),
             subtitle: Text(
-              app.description.isNotEmpty ? app.description : 'Version ${app.version}',
+              app.description.isNotEmpty
+                  ? app.description
+                  : 'Version ${app.version}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: WebDeckTheme.textSecondary),
+              style: const TextStyle(
+                fontSize: 12,
+                color: WebDeckTheme.textSecondary,
+              ),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isRunning) ...[
                   IconButton(
-                    icon: const Icon(Icons.stop_rounded, color: WebDeckTheme.accentRed, size: 20),
+                    icon: const Icon(
+                      Icons.stop_rounded,
+                      color: WebDeckTheme.accentRed,
+                      size: 20,
+                    ),
                     tooltip: 'Stop Server',
                     onPressed: () => viewModel.stopApp(app.id),
                   ),
@@ -823,16 +969,28 @@ class HomeScreen extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.open_in_browser, size: 20),
                   tooltip: 'Open in Browser',
-                  onPressed: () => _openInExternalBrowser(context, viewModel, app),
+                  onPressed: () =>
+                      _openInExternalBrowser(context, viewModel, app),
                 ),
                 ElevatedButton.icon(
                   onPressed: () => _launchApp(context, viewModel, app),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isRunning ? WebDeckTheme.accentGreen : WebDeckTheme.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    backgroundColor: isRunning
+                        ? WebDeckTheme.accentGreen
+                        : WebDeckTheme.primary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
-                  icon: Icon(isRunning ? Icons.play_arrow : Icons.rocket_launch, size: 14),
-                  label: Text(isRunning ? 'Play' : 'Launch', style: const TextStyle(fontSize: 12)),
+                  icon: Icon(
+                    isRunning ? Icons.play_arrow : Icons.rocket_launch,
+                    size: 14,
+                  ),
+                  label: Text(
+                    isRunning ? 'Play' : 'Launch',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ],
             ),
@@ -842,7 +1000,11 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildIconOnlyView(BuildContext context, CatalogViewModel viewModel, List<InstalledApp> apps) {
+  Widget _buildIconOnlyView(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    List<InstalledApp> apps,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         int crossAxisCount = (constraints.maxWidth / 120).floor().clamp(2, 8);
@@ -859,7 +1021,9 @@ class HomeScreen extends StatelessWidget {
           itemBuilder: (context, index) {
             final app = apps[index];
             final isRunning = viewModel.isAppRunning(app.id);
-            final hasIcon = app.localIconPath != null && File(app.localIconPath!).existsSync();
+            final hasIcon =
+                app.localIconPath != null &&
+                File(app.localIconPath!).existsSync();
 
             return InkWell(
               onTap: () => _launchApp(context, viewModel, app),
@@ -890,23 +1054,29 @@ class HomeScreen extends StatelessWidget {
                         child: hasIcon
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(18),
-                                child: Image.file(File(app.localIconPath!), fit: BoxFit.cover),
+                                child: Image.file(
+                                  File(app.localIconPath!),
+                                  fit: BoxFit.cover,
+                                ),
                               )
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(18),
                                 child: Image.asset(
                                   'assets/icons/app_icon.png',
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Center(
-                                    child: Text(
-                                      app.name.isNotEmpty ? app.name[0].toUpperCase() : 'W',
-                                      style: const TextStyle(
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Center(
+                                        child: Text(
+                                          app.name.isNotEmpty
+                                              ? app.name[0].toUpperCase()
+                                              : 'W',
+                                          style: const TextStyle(
+                                            fontSize: 32,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
                                 ),
                               ),
                       ),
@@ -920,7 +1090,10 @@ class HomeScreen extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: WebDeckTheme.accentGreen,
                               shape: BoxShape.circle,
-                              border: Border.all(color: WebDeckTheme.surface, width: 2),
+                              border: Border.all(
+                                color: WebDeckTheme.surface,
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -940,7 +1113,10 @@ class HomeScreen extends StatelessWidget {
                   ),
                   Text(
                     app.framework,
-                    style: const TextStyle(fontSize: 10, color: WebDeckTheme.textSecondary),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: WebDeckTheme.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -966,7 +1142,9 @@ class HomeScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: WebDeckTheme.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
-                  border: Border.all(color: WebDeckTheme.primary.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: WebDeckTheme.primary.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: const Icon(
                   Icons.view_in_ar,
@@ -976,7 +1154,7 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               const Text(
-                'Your WebDeck Shelf is Empty',
+                'No apps yet',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -985,9 +1163,13 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Sideload any web application from GitHub Releases or a direct build archive. WebDeck will extract it into local sandbox storage and serve it via an isolated loopback webview.',
+                'Install ready-made apps such as downloaders, converters and price trackers from the Store. They run entirely on this computer.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: WebDeckTheme.textSecondary, height: 1.4),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: WebDeckTheme.textSecondary,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 24),
               Wrap(
@@ -996,19 +1178,27 @@ class HomeScreen extends StatelessWidget {
                 runSpacing: 12,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => _showInstallDialog(context, viewModel),
-                    icon: const Icon(Icons.add_link),
-                    label: const Text('Add from GitHub'),
+                    onPressed: () => context.read<ShellNavigation>().value =
+                        ShellNavigation.store,
+                    icon: const Icon(Icons.storefront),
+                    label: const Text('Browse the Store'),
                   ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: WebDeckTheme.textPrimary,
-                      side: const BorderSide(color: WebDeckTheme.border),
+                  if (context.watch<SettingsService>().developerMode) ...[
+                    ElevatedButton.icon(
+                      onPressed: () => _showInstallDialog(context, viewModel),
+                      icon: const Icon(Icons.add_link),
+                      label: const Text('Add from GitHub'),
                     ),
-                    onPressed: () => viewModel.installDemoApp(),
-                    icon: const Icon(Icons.sports_esports),
-                    label: const Text('Try Demo App'),
-                  ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: WebDeckTheme.textPrimary,
+                        side: const BorderSide(color: WebDeckTheme.border),
+                      ),
+                      onPressed: () => viewModel.installDemoApp(),
+                      icon: const Icon(Icons.sports_esports),
+                      label: const Text('Try Demo App'),
+                    ),
+                  ],
                 ],
               ),
             ],

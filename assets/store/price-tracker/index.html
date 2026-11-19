@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Price Tracker</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .add { display: grid; grid-template-columns: 1fr 160px auto; gap: 10px; }
+    @media (max-width: 640px) { .add { grid-template-columns: 1fr; } }
+    .thumb { width: 56px; height: 56px; border-radius: 8px; background: #fff center / contain no-repeat; flex: none; border: 1px solid var(--wd-border); }
+    .thumb.none { background: var(--wd-surface-2); display: grid; place-items: center; font-size: 22px; }
+    .price { font-size: 18px; font-weight: 700; text-align: right; white-space: nowrap; }
+    .delta { font-size: 12px; font-weight: 600; text-align: right; }
+    .down { color: var(--wd-green); }
+    .up { color: var(--wd-red); }
+    .spark { flex: none; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+    @media (max-width: 640px) { .stats { grid-template-columns: repeat(2, 1fr); } .spark { display: none; } }
+    .stat { background: var(--wd-surface-2); border: 1px solid var(--wd-border); border-radius: 10px; padding: 10px 12px; }
+    .stat b { display: block; font-size: 16px; }
+    .stat span { font-size: 11px; color: var(--wd-muted); text-transform: uppercase; letter-spacing: .5px; }
+    #chart text { fill: var(--wd-muted); font-size: 11px; font-family: var(--wd-font); }
+    .detail-head { display: flex; gap: 14px; align-items: center; }
+    .history { max-height: 260px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">🏷️</div>
+      <div>
+        <h1>Price Tracker</h1>
+        <div class="wd-sub" id="sub">Track prices and see their history</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="checkAll">Check all now</button>
+    </div>
+
+    <div class="wd-card">
+      <form class="add" id="addForm">
+        <input class="wd-input" id="url" placeholder="Paste a product link" autocomplete="off" required>
+        <input class="wd-input" id="target" type="number" step="any" min="0" placeholder="Alert below (optional)">
+        <button class="wd-btn wd-btn-primary" type="submit" id="addBtn">Track</button>
+      </form>
+      <details style="margin-top:10px">
+        <summary class="wd-small wd-muted" style="cursor:pointer">Price not detected? Use a CSS selector</summary>
+        <input class="wd-input" id="selector" placeholder="e.g. .product-price .amount" style="margin-top:8px">
+        <p class="wd-small wd-muted" style="margin-top:6px">Most shops are detected automatically. Some sites (Amazon especially) sometimes block automated checks; WebDeck will show when that happens.</p>
+      </details>
+    </div>
+
+    <div class="wd-list" id="list" style="margin-top:16px"></div>
+  </div>
+
+  <dialog class="wd-dialog" id="detail" style="width:min(760px, calc(100vw - 32px))"></dialog>
+
+  <script src="extract.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

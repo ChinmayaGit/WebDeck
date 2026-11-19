@@ -1,0 +1,11 @@
+{
+  "id": "image-converter",
+  "name": "Image Converter",
+  "version": "1.0.0",
+  "description": "Convert and resize images between JPEG, PNG and WebP in batches, fully offline. Opens HEIC, GIF, BMP, TIFF and anything else your system can display.",
+  "category": "Converters",
+  "icon": "image",
+  "color": "#8B5CF6",
+  "permissions": ["files"],
+  "author": "WebDeck"
+}

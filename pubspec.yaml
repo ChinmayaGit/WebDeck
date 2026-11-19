@@ -48,6 +48,7 @@ dependencies:
   webview_flutter_wkwebview: ^3.27.2
   webview_flutter_android: ^4.14.1
   webview_flutter_platform_interface: ^2.15.1
+  crypto: ^3.0.6
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +77,14 @@ flutter:
     - assets/icons/
     - assets/images/
     - assets/vendor/
+    - assets/runtime/
+    - assets/store/
+    - assets/store/image-converter/
+    - assets/store/free-games/
+    - assets/store/price-tracker/
+    - assets/store/ticket-watcher/
+    - assets/store/media-downloader/
+    - assets/store/doc-converter/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

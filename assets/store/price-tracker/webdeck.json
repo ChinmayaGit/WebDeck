@@ -1,0 +1,12 @@
+{
+  "id": "price-tracker",
+  "name": "Price Tracker",
+  "version": "1.0.0",
+  "description": "Track product prices on any shop, see the full price history as a chart, and get notified when a price drops or hits your target. Checks run in the background every 4 hours.",
+  "category": "Trackers",
+  "icon": "price",
+  "color": "#10B981",
+  "permissions": ["net", "notify", "jobs"],
+  "jobs": [{ "id": "check-prices", "title": "Check prices", "every": "4h" }],
+  "author": "WebDeck"
+}

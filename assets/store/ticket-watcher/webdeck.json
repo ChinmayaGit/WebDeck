@@ -1,0 +1,12 @@
+{
+  "id": "ticket-watcher",
+  "name": "Ticket Watcher",
+  "version": "1.0.0",
+  "description": "Watch any event, train or booking page and get notified when tickets become available, when \"Sold out\" disappears, or when the page changes. Checks run in the background every 30 minutes.",
+  "category": "Trackers",
+  "icon": "ticket",
+  "color": "#F59E0B",
+  "permissions": ["net", "notify", "jobs"],
+  "jobs": [{ "id": "check-watches", "title": "Check pages", "every": "30m" }],
+  "author": "WebDeck"
+}

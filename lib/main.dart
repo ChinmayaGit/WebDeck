@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
@@ -10,9 +11,20 @@ import 'data/services/archive_extractor_service.dart';
 import 'data/services/github_service.dart';
 import 'data/services/local_server_service.dart';
 import 'data/services/storage_service.dart';
+import 'runtime/app_data_store.dart';
+import 'runtime/job_scheduler.dart';
+import 'runtime/notification_service.dart';
+import 'runtime/runtime_host.dart';
+import 'runtime/settings_service.dart';
+import 'runtime/store_service.dart';
+import 'runtime/tools_service.dart';
 import 'ui/core/theme.dart';
 import 'ui/features/catalog/view_models/catalog_view_model.dart';
-import 'ui/features/catalog/views/home_screen.dart';
+import 'ui/features/jobs/job_runner_host.dart';
+import 'ui/features/shell/app_launcher.dart';
+import 'ui/features/shell/shell_screen.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,16 +50,78 @@ void main() async {
     serverService: serverService,
   );
 
+  // ---- WebDeck runtime: the shared backend every runtime app uses.
+  final baseDir = storageService.getBaseDirectory;
+  final settings = SettingsService(baseDir);
+  await settings.load();
+  final notifications = NotificationService(baseDir, settings);
+  await notifications.load();
+  final dataStore = AppDataStore(baseDir);
+  final tools = ToolsService(baseDir);
+  final runtime = RuntimeHost(
+    data: dataStore,
+    settings: settings,
+    notifications: notifications,
+    tools: tools,
+    baseDir: baseDir,
+  );
+  serverService.runtimeHost = runtime;
+  repository.dataStore = dataStore;
+
+  final scheduler = JobScheduler(
+    apps: repository.getInstalledApps,
+    ensureServer: (app) async {
+      final wasRunning = repository.isAppRunning(app.id);
+      final instance = await repository.launchApp(app);
+      return ServerHandle(instance.launchUrl, wasRunning);
+    },
+    stopServer: repository.stopApp,
+    settings: settings,
+    store: dataStore,
+  );
+  runtime.jobs = scheduler;
+  runtime.confirm = _confirmPrompt;
+  runtime.openExternalUrl = (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  final store = StoreService(repository: repository, settings: settings);
+  store.refresh();
+  scheduler.start();
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) => CatalogViewModel(repository),
-        ),
+        ChangeNotifierProvider(create: (_) => CatalogViewModel(repository)),
+        ChangeNotifierProvider.value(value: settings),
+        ChangeNotifierProvider.value(value: notifications),
+        ChangeNotifierProvider.value(value: tools),
+        ChangeNotifierProvider.value(value: scheduler),
+        ChangeNotifierProvider.value(value: store),
+        ChangeNotifierProvider(create: (_) => ShellNavigation()),
+        Provider.value(value: storageService),
+        Provider.value(value: runtime),
       ],
       child: const WebDeckApp(),
     ),
   );
+}
+
+/// Permission-style prompt shown when a runtime app asks for something sensitive.
+Future<bool> _confirmPrompt(String title, String message) async {
+  final context = navigatorKey.currentContext;
+  if (context == null) return false;
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: WebDeckTheme.surface,
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Allow')),
+      ],
+    ),
+  );
+  return result ?? false;
 }
 
 class WebDeckApp extends StatelessWidget {
@@ -56,10 +130,18 @@ class WebDeckApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'WebDeck - Local App Store',
+      title: 'WebDeck',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: WebDeckTheme.darkTheme,
-      home: const HomeScreen(),
+      home: const ShellScreen(),
+      builder: (context, child) => Stack(
+        textDirection: TextDirection.ltr,
+        children: [
+          if (child != null) Positioned.fill(child: child),
+          const JobRunnerHost(),
+        ],
+      ),
     );
   }
 }

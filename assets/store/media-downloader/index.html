@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media Downloader</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .options { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; align-items: end; }
+    .options > div { min-width: 150px; }
+    .dl .title { font-weight: 600; }
+    .dl .progress-line { display: flex; gap: 10px; font-size: 12px; color: var(--wd-muted); margin-top: 6px; }
+    .kind { font-size: 20px; width: 34px; text-align: center; }
+    .setup-tool { display: flex; align-items: center; gap: 10px; }
+    .setup-tool + .setup-tool { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">⬇️</div>
+      <div>
+        <h1>Media Downloader</h1>
+        <div class="wd-sub">Video &amp; music from YouTube and 1,000+ sites</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="openFolder">Open downloads</button>
+    </div>
+
+    <div class="wd-card" id="setup" hidden>
+      <h2 style="margin-bottom:6px">One-time setup</h2>
+      <p class="wd-muted" style="margin-bottom:14px">This app uses two free open-source tools. WebDeck downloads them from their official releases and keeps them up to date in Settings → Tools.</p>
+      <div id="setupTools"></div>
+    </div>
+
+    <div class="wd-card" id="main">
+      <div class="wd-row" style="margin-bottom:12px">
+        <div class="wd-tabs" role="tablist">
+          <button class="wd-tab" role="tab" data-mode="video" aria-selected="true">🎬 Video</button>
+          <button class="wd-tab" role="tab" data-mode="audio" aria-selected="false">🎵 Music</button>
+        </div>
+      </div>
+      <form class="form" id="form">
+        <input class="wd-input" id="url" placeholder="Paste a link, e.g. https://www.youtube.com/watch?v=…" autocomplete="off" required>
+        <button class="wd-btn wd-btn-primary" id="go" type="submit">Download</button>
+      </form>
+      <div class="options">
+        <div data-for="video">
+          <label class="wd-label" for="vq">Quality</label>
+          <select class="wd-select" id="vq">
+            <option value="best">Best available</option>
+            <option value="2160">4K (2160p)</option>
+            <option value="1440">1440p</option>
+            <option value="1080" selected>1080p</option>
+            <option value="720">720p</option>
+            <option value="480">480p</option>
+          </select>
+        </div>
+        <div data-for="video">
+          <label class="wd-label" for="vc">Format</label>
+          <select class="wd-select" id="vc">
+            <option value="mp4" selected>MP4 (most compatible)</option>
+            <option value="mkv">MKV</option>
+            <option value="webm">WebM</option>
+          </select>
+        </div>
+        <div data-for="audio" hidden>
+          <label class="wd-label" for="af">Format</label>
+          <select class="wd-select" id="af">
+            <option value="mp3" selected>MP3</option>
+            <option value="m4a">M4A (AAC)</option>
+            <option value="opus">Opus</option>
+            <option value="flac">FLAC (lossless container)</option>
+            <option value="wav">WAV</option>
+          </select>
+        </div>
+        <div data-for="audio" hidden>
+          <label class="wd-label" for="aq">Bitrate</label>
+          <select class="wd-select" id="aq">
+            <option value="0" selected>Best (VBR)</option>
+            <option value="320K">320 kbps</option>
+            <option value="192K">192 kbps</option>
+            <option value="128K">128 kbps</option>
+          </select>
+        </div>
+        <label class="wd-row wd-small"><input type="checkbox" id="playlist"> Whole playlist</label>
+        <label class="wd-row wd-small"><input type="checkbox" id="meta" checked> Cover art &amp; tags</label>
+        <label class="wd-row wd-small" data-for="video"><input type="checkbox" id="subs"> Subtitles</label>
+      </div>
+    </div>
+
+    <div class="wd-row" style="margin:22px 0 10px">
+      <h2>Downloads</h2>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-sm wd-btn-ghost" id="clearDone">Clear finished</button>
+    </div>
+    <div class="wd-list" id="list"></div>
+    <p class="wd-small wd-muted" style="margin-top:24px">Only download content you have the right to download. Respect each site's terms of service.</p>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

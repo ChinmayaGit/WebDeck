@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ticket Watcher</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+    .state { font-size: 22px; width: 36px; text-align: center; flex: none; }
+    .snippet { font-size: 12px; color: var(--wd-muted); margin-top: 4px; font-style: italic; }
+    .preview { max-height: 220px; overflow: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon">🎟️</div>
+      <div>
+        <h1>Ticket Watcher</h1>
+        <div class="wd-sub">Get alerted when tickets or seats become available</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn" id="checkAll">Check all now</button>
+    </div>
+
+    <div class="wd-card">
+      <form id="form" class="wd-stack">
+        <div class="grid2">
+          <div><label class="wd-label" for="name">Name</label><input class="wd-input" id="name" placeholder="e.g. Coldplay Mumbai, Day 2"></div>
+          <div><label class="wd-label" for="url">Page link</label><input class="wd-input" id="url" placeholder="https://…" required></div>
+        </div>
+        <div class="grid2">
+          <div>
+            <label class="wd-label" for="mode">Alert me when</label>
+            <select class="wd-select" id="mode">
+              <option value="disappears">this text disappears (e.g. "Sold out", "Coming soon")</option>
+              <option value="appears">this text appears (e.g. "Book now", "Available")</option>
+              <option value="changes">anything on the page changes</option>
+            </select>
+          </div>
+          <div id="textRow"><label class="wd-label" for="text">Text</label><input class="wd-input" id="text" placeholder="Sold out"></div>
+        </div>
+        <details>
+          <summary class="wd-small wd-muted" style="cursor:pointer">Advanced: watch only part of the page</summary>
+          <input class="wd-input" id="selector" placeholder="CSS selector, e.g. #availability" style="margin-top:8px">
+        </details>
+        <div class="wd-row">
+          <button class="wd-btn" type="button" id="preview">Preview what WebDeck sees</button>
+          <div class="wd-spacer"></div>
+          <button class="wd-btn wd-btn-primary" type="submit" id="add">Start watching</button>
+        </div>
+        <div id="previewOut" hidden></div>
+      </form>
+    </div>
+
+    <div class="wd-list" id="list" style="margin-top:16px"></div>
+    <p class="wd-small wd-muted" style="margin-top:20px">Tip: pages that load their content with JavaScript may look empty to a plain fetch. Use “Preview” to check, or watch for text that is in the page source.</p>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
