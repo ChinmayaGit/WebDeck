@@ -144,7 +144,7 @@
   let visualizerAnimId = null;
   let incomingCallData = null;
 
-  // Initial mock directory of network devices with claimed phone numbers
+  // Initial directory of network devices with claimed phone numbers
   const DEFAULT_DIRECTORY = [
     { id: 'peer-mbp', name: 'MacBook Pro (Living Room)', number: '+1 (555) 728-1934', transport: 'wifi', status: 'Available' },
     { id: 'peer-pixel', name: 'Pixel 8 (Mobile)', number: '+1 (555) 302-8841', transport: 'wifi', status: 'Available' },
@@ -158,7 +158,7 @@
     return String(num || '').replace(/[^0-9]/g, '');
   }
 
-  // Load user profile
+  // Load user profile - provision immediately without blocking modal!
   async function loadProfile() {
     try {
       if (wd && wd.kv) {
@@ -173,10 +173,23 @@
     }
 
     if (!myProfile || !myProfile.number) {
-      openOnboardingModal(false);
-    } else {
-      updateProfilePill();
+      let rand = generateRandomNumber();
+      while (!(await checkNumberAvailability(rand)).available) {
+        rand = generateRandomNumber();
+      }
+      myProfile = {
+        id: 'user-' + Date.now(),
+        name: 'My Device',
+        number: rand,
+        updatedAt: new Date().toISOString()
+      };
+      try {
+        if (wd && wd.kv) await wd.kv.set('caller_profile', myProfile);
+      } catch (_) {}
+      localStorage.setItem('wd_caller_profile', JSON.stringify(myProfile));
     }
+
+    updateProfilePill();
   }
 
   function updateProfilePill() {
@@ -184,6 +197,9 @@
       $('pillName').textContent = myProfile.name || 'My Device';
       $('pillNumber').textContent = myProfile.number || 'No number';
       $('callerBadge').textContent = `${myProfile.number}`;
+      if ($('bannerMyNumber')) {
+        $('bannerMyNumber').textContent = myProfile.number;
+      }
     }
   }
 
@@ -239,26 +255,14 @@
     return `+1 (${area}) ${mid}-${line}`;
   }
 
-  // Open Onboarding / Profile Modal
-  async function openOnboardingModal(canCancel = true) {
+  // Open Edit Profile Modal
+  async function openEditModal() {
     $('onboardingModal').hidden = false;
-    $('btnCancelModal').style.display = canCancel ? 'inline-block' : 'none';
-    $('modalTitle').textContent = myProfile ? 'Edit Your Caller ID & Number' : 'Set Up Your WebDeck Caller ID';
+    $('modalTitle').textContent = 'Custom Caller ID & Number';
 
-    $('inputProfileName').value = myProfile ? myProfile.name : 'WebDeck User';
+    $('inputProfileName').value = myProfile ? myProfile.name : 'My Device';
     $('inputProfileNumber').value = myProfile ? myProfile.number : '';
-
-    if (!myProfile || !myProfile.number) {
-      // Auto-generate initial random number
-      let rand = generateRandomNumber();
-      while (!(await checkNumberAvailability(rand)).available) {
-        rand = generateRandomNumber();
-      }
-      $('inputProfileNumber').value = rand;
-      validateModalNumber();
-    } else {
-      validateModalNumber();
-    }
+    validateModalNumber();
   }
 
   async function validateModalNumber() {
@@ -301,8 +305,27 @@
 
     updateProfilePill();
     $('onboardingModal').hidden = true;
-    if (wd && wd.ui) wd.ui.toast(`Caller ID set to ${number}`, 'ok');
+    if (wd && wd.ui) wd.ui.toast(`Caller ID updated: ${number}`, 'ok');
     renderDirectory();
+  }
+
+  // Randomize Number immediately
+  async function randomizeNumberNow() {
+    let rand = generateRandomNumber();
+    while (!(await checkNumberAvailability(rand, myProfile ? myProfile.id : null)).available) {
+      rand = generateRandomNumber();
+    }
+    myProfile.number = rand;
+    myProfile.updatedAt = new Date().toISOString();
+
+    try {
+      if (wd && wd.kv) await wd.kv.set('caller_profile', myProfile);
+    } catch (_) {}
+    localStorage.setItem('wd_caller_profile', JSON.stringify(myProfile));
+
+    updateProfilePill();
+    playDtmf('5');
+    if (wd && wd.ui) wd.ui.toast(`Assigned new random Caller ID: ${rand}`, 'ok');
   }
 
   // --- Dialpad Logic ---
@@ -337,7 +360,7 @@
 
     // Check if user is calling their own number
     if (myProfile && cleanNumber(target) === cleanNumber(myProfile.number)) {
-      wd.ui.toast('Cannot call your own number. Dial another peer or test with "Test Call Me" button.', 'err');
+      wd.ui.toast('Cannot call your own number. Dial another peer or test with "Test Call Me".', 'err');
       return;
     }
 
@@ -350,8 +373,7 @@
     // Show Call Stage
     inCall = true;
     $('callStageView').hidden = false;
-    $('tabContentDialpad').hidden = true;
-    $('tabContentDirectory').hidden = true;
+    $('tabContentMain').hidden = true;
     $('tabContentRecents').hidden = true;
     $('tabContentSettings').hidden = true;
 
@@ -431,7 +453,7 @@
 
     inCall = false;
     $('callStageView').hidden = true;
-    switchTab('dialpad');
+    switchTab('dialer-contacts');
 
     if (callSeconds > 0) {
       wd.ui.toast(`Call ended (${Math.floor(callSeconds / 60)}m ${callSeconds % 60}s)`, 'ok');
@@ -483,7 +505,6 @@
       ctx.fillStyle = 'rgba(9, 13, 22, 0.4)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw flowing sine waves representing encrypted voice stream
       ctx.beginPath();
       ctx.lineWidth = 2.5;
       ctx.strokeStyle = '#10B981';
@@ -533,7 +554,6 @@
 
     startRingtone();
 
-    // Send WebDeck system notification if supported
     try {
       if (wd && wd.notify) {
         wd.notify(`Incoming Call: ${data.name}`, `Dialing your number ${myProfile ? myProfile.number : ''}`);
@@ -547,11 +567,9 @@
     if (incomingCallData) {
       const data = incomingCallData;
       incomingCallData = null;
-      // Start active call directly
       inCall = true;
       $('callStageView').hidden = false;
-      $('tabContentDialpad').hidden = true;
-      $('tabContentDirectory').hidden = true;
+      $('tabContentMain').hidden = true;
       $('tabContentRecents').hidden = true;
       $('tabContentSettings').hidden = true;
 
@@ -618,24 +636,37 @@
     }
 
     $('directoryList').innerHTML = filtered.map(c => `
-      <div class="contact-card">
+      <div class="contact-card" data-select-contact="${esc(c.number)}">
         <div class="contact-avatar">${esc(c.name[0] || '📱')}</div>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:15px">${esc(c.name)}</div>
+        <div style="flex:1;cursor:pointer" title="Click to fill number in dialpad">
+          <div style="font-weight:700;font-size:14px">${esc(c.name)}</div>
           <div class="wd-small" style="font-family:monospace;letter-spacing:.5px;color:var(--wd-fg)">${esc(c.number)}</div>
           <div class="wd-small wd-muted" style="margin-top:2px">
             <span style="color:#10B981">● ${esc(c.status || 'Available')}</span> · ${esc(getTransportLabel(c.transport))}
           </div>
         </div>
-        <div style="display:flex;gap:8px">
-          <button class="wd-btn wd-btn-sm" data-call-contact="${esc(c.number)}" data-call-video="false" style="background:#16A34A;color:#fff;border:none">📞 Call</button>
-          <button class="wd-btn wd-btn-sm" data-call-contact="${esc(c.number)}" data-call-video="true" style="background:#8B5CF6;color:#fff;border:none">📹 Video</button>
+        <div style="display:flex;gap:6px">
+          <button class="wd-btn wd-btn-sm" data-call-contact="${esc(c.number)}" data-call-video="false" style="background:#16A34A;color:#fff;border:none;padding:5px 10px" title="Voice Call">📞</button>
+          <button class="wd-btn wd-btn-sm" data-call-contact="${esc(c.number)}" data-call-video="true" style="background:#8B5CF6;color:#fff;border:none;padding:5px 10px" title="Video Call">📹</button>
         </div>
       </div>
     `).join('');
 
+    // Clicking contact fills dialpad
+    document.querySelectorAll('[data-select-contact]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        dialInputString = el.dataset.selectContact;
+        updateDialDisplay();
+        playDtmf('1');
+        if (wd && wd.ui) wd.ui.toast(`Selected ${dialInputString}`, 'ok');
+      });
+    });
+
+    // Call buttons
     document.querySelectorAll('[data-call-contact]').forEach(b => {
-      b.onclick = () => {
+      b.onclick = (e) => {
+        e.stopPropagation();
         const num = b.dataset.callContact;
         const isVid = b.dataset.callVideo === 'true';
         initiateCall(num, isVid);
@@ -723,24 +754,33 @@
     document.querySelectorAll('.call-tab').forEach(t => {
       t.classList.toggle('active', t.dataset.tab === tabId);
     });
-    $('tabContentDialpad').hidden = tabId !== 'dialpad';
-    $('tabContentDirectory').hidden = tabId !== 'directory';
+    $('tabContentMain').hidden = tabId !== 'dialer-contacts';
     $('tabContentRecents').hidden = tabId !== 'recents';
     $('tabContentSettings').hidden = tabId !== 'settings';
 
-    if (tabId === 'directory') renderDirectory();
+    if (tabId === 'dialer-contacts') renderDirectory();
     if (tabId === 'recents') renderRecents();
   }
 
   // --- Bind All Events ---
   function bindEvents() {
-    // Top Profile Pill
-    $('profilePill').onclick = () => openOnboardingModal(true);
+    // Top Profile Pill & Banner Actions
+    $('profilePill').onclick = openEditModal;
+    if ($('btnQuickEditProfile')) $('btnQuickEditProfile').onclick = openEditModal;
+    if ($('btnQuickRandomize')) $('btnQuickRandomize').onclick = randomizeNumberNow;
+    if ($('btnQuickCopyNumber')) {
+      $('btnQuickCopyNumber').onclick = () => {
+        if (myProfile && myProfile.number) {
+          navigator.clipboard.writeText(myProfile.number);
+          wd.ui.toast(`Copied ${myProfile.number} to clipboard`, 'ok');
+        }
+      };
+    }
 
     // Modal Events
     $('btnGenRandomNumber').onclick = async () => {
       let rand = generateRandomNumber();
-      while (!(await checkNumberAvailability(rand)).available) {
+      while (!(await checkNumberAvailability(rand, myProfile ? myProfile.id : null)).available) {
         rand = generateRandomNumber();
       }
       $('inputProfileNumber').value = rand;
@@ -758,7 +798,7 @@
         document.querySelectorAll('.transport-chip').forEach(x => x.classList.remove('active'));
         c.classList.add('active');
         activeTransport = c.dataset.transport;
-        wd.ui.toast(`Transport set to: ${c.textContent.trim()}`, 'ok');
+        wd.ui.toast(`Transport: ${c.textContent.trim()}`, 'ok');
       };
     });
 
@@ -840,7 +880,7 @@
     };
 
     // Settings actions
-    $('btnEditProfile').onclick = () => openOnboardingModal(true);
+    $('btnEditProfile').onclick = openEditModal;
     $('btnCopyMyNumber').onclick = () => {
       if (myProfile && myProfile.number) {
         navigator.clipboard.writeText(myProfile.number);
