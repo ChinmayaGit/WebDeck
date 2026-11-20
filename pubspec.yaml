@@ -122,6 +122,12 @@ flutter:
     - assets/store/notes/
     - assets/store/bookings/
     - assets/store/alpine-host/
+    - assets/store/database-studio/
+    - assets/store/torrent-downloader/
+    - assets/store/calls/
+    - assets/store/screen-share/
+    - assets/store/ocr-scanner/
+    - assets/store/font-converter/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

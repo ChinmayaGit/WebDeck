@@ -1,0 +1,12 @@
+{
+  "id": "torrent-downloader",
+  "name": "Torrent Downloader",
+  "version": "1.0.0",
+  "description": "Download legal torrents (Linux ISOs, public-domain media, open datasets) with live download speeds, peer stats, and instant in-app media playback.",
+  "category": "Downloaders",
+  "icon": "download",
+  "color": "#22C55E",
+  "permissions": ["net", "files"],
+  "essential": false,
+  "author": "WebDeck"
+}

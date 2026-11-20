@@ -1,0 +1,12 @@
+{
+  "id": "calls",
+  "name": "Voice & Video Calls",
+  "version": "1.0.0",
+  "description": "Call your own devices over local Wi-Fi, peer-to-peer with Device Link. Low-latency encrypted audio, HD video, and camera switching.",
+  "category": "Network",
+  "icon": "call",
+  "color": "#16A34A",
+  "permissions": ["net", "link"],
+  "essential": false,
+  "author": "WebDeck"
+}

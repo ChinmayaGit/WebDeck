@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Torrent Downloader</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .torrent-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    .torrent-card:hover { border-color: var(--wd-primary); }
+    .p-bar { height: 6px; background: var(--wd-surface-2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+    .p-fill { height: 100%; background: #22C55E; border-radius: 3px; transition: width .3s ease; }
+    .stat-pill { font-size: 11px; background: var(--wd-surface-2); padding: 3px 8px; border-radius: 6px; }
+    .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+    .cat-item { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1100px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#22C55E;color:#fff">⬇️</div>
+      <div>
+        <h1>Torrent Downloader</h1>
+        <div class="wd-sub">Legal Torrents · Linux ISOs · Public Domain Movies & Datasets · P2P Transfers</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnOpenMagnet">+ Add Magnet / Torrent</button>
+    </div>
+
+    <!-- Active Downloads Section -->
+    <div class="wd-row" style="margin-bottom:8px">
+      <span style="font-weight:700;font-size:15px">Active Downloads (<span id="activeCount">0</span>)</span>
+      <div class="wd-spacer"></div>
+      <span class="wd-small wd-muted" id="speedSummary">↓ 0 KB/s · ↑ 0 KB/s</span>
+    </div>
+    <div id="downloadsList"></div>
+
+    <!-- Curated Legal Torrents Catalog -->
+    <div style="margin-top:24px;border-top:1px solid var(--wd-border);padding-top:16px">
+      <span style="font-weight:700;font-size:16px">Verified Legal Open Torrents</span>
+      <div class="wd-small wd-muted">One-click download official Linux distributions and Creative Commons media</div>
+      <div class="catalog-grid" id="catalogGrid"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Database Studio</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .studio-layout { display: flex; gap: 14px; height: calc(100vh - 120px); min-height: 520px; }
+    .tables-sidebar { width: 250px; background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; flex: none; overflow-y: auto; }
+    .table-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .table-item:hover { background: var(--wd-surface-2); }
+    .table-item.active { background: var(--wd-primary); color: #fff; }
+    .main-stage { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+    .sql-editor-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .sql-input { width: 100%; min-height: 80px; background: #0F172A; border: 1px solid var(--wd-border); border-radius: 8px; padding: 10px; color: #38BDF8; font-family: monospace; font-size: 13px; resize: vertical; outline: none; }
+    .data-table-wrap { flex: 1; background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; overflow: auto; padding: 10px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th, .data-table td { border: 1px solid var(--wd-border); padding: 8px 10px; text-align: left; }
+    .data-table th { background: var(--wd-surface-2); position: sticky; top: 0; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1200px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#0EA5E9;color:#fff">🗄️</div>
+      <div>
+        <h1>Database Studio</h1>
+        <div class="wd-sub">SQLite · PostgreSQL · MySQL · MongoDB · Schema Inspector & Query Runner</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <select id="connSelect" class="wd-input" style="font-size:12px;max-width:200px">
+        <option value="sqlite-local">SQLite (In-Memory / Local)</option>
+        <option value="postgres-demo">PostgreSQL (Demo)</option>
+        <option value="mongo-demo">MongoDB (Collections)</option>
+      </select>
+      <button class="wd-btn wd-btn-primary" id="btnNewTable">+ New Table</button>
+      <button class="wd-btn" id="btnExportData">Export CSV</button>
+    </div>
+
+    <div class="studio-layout">
+      <!-- Tables Sidebar -->
+      <div class="tables-sidebar">
+        <div style="font-weight:700;font-size:12px;text-transform:uppercase;color:var(--wd-muted)">Tables / Collections</div>
+        <div id="tablesList" style="display:flex;flex-direction:column;gap:4px"></div>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-sm" id="btnResetSampleData">Load Sample Schema</button>
+      </div>
+
+      <!-- Main Query & Data Stage -->
+      <div class="main-stage">
+        <!-- SQL Editor -->
+        <div class="sql-editor-card">
+          <div class="wd-row">
+            <span style="font-weight:700;font-size:13px">SQL Query Editor</span>
+            <div class="wd-spacer"></div>
+            <button class="wd-btn wd-btn-primary wd-btn-sm" id="btnRunQuery">▶ Execute SQL</button>
+          </div>
+          <textarea class="sql-input" id="sqlQueryInput">SELECT * FROM users ORDER BY id ASC LIMIT 50;</textarea>
+          <div id="queryStatus" class="wd-small wd-muted">Ready</div>
+        </div>
+
+        <!-- Data Grid View -->
+        <div class="data-table-wrap">
+          <div id="tableContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -121,12 +121,20 @@
     "bills-tracker",
     "notes",
     "bookings",
-    "alpine-host"
+    "alpine-host",
+    "database-studio",
+    "torrent-downloader",
+    "calls",
+    "screen-share",
+    "ocr-scanner",
+    "font-converter"
   ],
   "essential": [
     "notes",
     "camscanner",
     "bills-tracker",
+    "database-studio",
+    "ocr-scanner",
     "file-transfer",
     "nearby-share",
     "pdf-toolkit",
@@ -154,46 +162,32 @@
   ],
   "upcoming": [
     {
-      "name": "Database Studio",
-      "category": "Developer",
-      "icon": "database",
-      "color": "#0EA5E9",
-      "description": "SQLite, PostgreSQL, MySQL, MongoDB and PocketBase in one app, and it opens the databases of repos you install."
+      "name": "Password Vault",
+      "category": "Tools",
+      "icon": "tool",
+      "color": "#6366F1",
+      "description": "Offline encrypted password and credential manager with AES-256 and zero-knowledge encryption."
     },
     {
-      "name": "Torrent Downloader",
-      "category": "Downloaders",
-      "icon": "download",
-      "color": "#22C55E",
-      "description": "Download legal torrents (Linux ISOs, public-domain media) and play while downloading."
+      "name": "Podcast Studio",
+      "category": "Audio",
+      "icon": "audio",
+      "color": "#EC4899",
+      "description": "Stream and download millions of free podcasts with offline chapter markers and playback speeds."
     },
     {
-      "name": "Voice & Video Calls",
-      "category": "Network",
-      "icon": "call",
-      "color": "#16A34A",
-      "description": "Call your own devices over Wi-Fi, peer to peer with Device Link."
+      "name": "LAN Multiplayer Arena",
+      "category": "Games",
+      "icon": "game",
+      "color": "#E11D48",
+      "description": "Play local network party games across phones and laptops with zero setup."
     },
     {
-      "name": "Screen Share",
-      "category": "Network",
-      "icon": "share",
-      "color": "#2563EB",
-      "description": "Show your screen on another of your devices."
-    },
-    {
-      "name": "OCR Scanner",
+      "name": "Markdown Slides & Keynote",
       "category": "Documents",
-      "icon": "text",
+      "icon": "doc",
       "color": "#0EA5E9",
-      "description": "Turn photos and scanned PDFs into searchable, copyable text, offline."
-    },
-    {
-      "name": "Font Converter",
-      "category": "Developer",
-      "icon": "text",
-      "color": "#64748B",
-      "description": "Convert TTF/OTF \u21c4 WOFF2 for the web."
+      "description": "Create beautiful interactive presentation slides from simple Markdown files."
     }
   ]
 }

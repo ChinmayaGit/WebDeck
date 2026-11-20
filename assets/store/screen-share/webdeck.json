@@ -1,0 +1,12 @@
+{
+  "id": "screen-share",
+  "name": "Screen Share",
+  "version": "1.0.0",
+  "description": "Mirror and stream your screen to another paired device on the local network over Device Link. Low-latency wireless display and presentation mode.",
+  "category": "Network",
+  "icon": "share",
+  "color": "#2563EB",
+  "permissions": ["net", "link"],
+  "essential": false,
+  "author": "WebDeck"
+}

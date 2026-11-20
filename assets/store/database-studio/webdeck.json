@@ -1,0 +1,12 @@
+{
+  "id": "database-studio",
+  "name": "Database Studio",
+  "version": "1.0.0",
+  "description": "Universal database manager: SQLite, PostgreSQL, MySQL, MongoDB and REST API stores. Run SQL queries, inspect schemas, edit table rows, and export data.",
+  "category": "Developer",
+  "icon": "database",
+  "color": "#0EA5E9",
+  "permissions": ["net", "files"],
+  "essential": true,
+  "author": "WebDeck"
+}

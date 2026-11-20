@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice & Video Calls</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .call-stage { position: relative; width: 100%; height: 440px; background: #000; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+    .remote-video { width: 100%; height: 100%; object-fit: cover; }
+    .local-pip { position: absolute; bottom: 16px; right: 16px; width: 140px; aspect-ratio: 16/9; background: #222; border: 2px solid rgba(255,255,255,.2); border-radius: 8px; overflow: hidden; }
+    .local-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .call-controls { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; background: rgba(0,0,0,.65); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 30px; border: 1px solid rgba(255,255,255,.15); }
+    .call-btn { width: 44px; height: 44px; border-radius: 50%; border: none; font-size: 18px; cursor: pointer; display: grid; place-items: center; }
+    .btn-hangup { background: #EF4444; color: #fff; }
+    .btn-toggle { background: rgba(255,255,255,.2); color: #fff; }
+    .btn-toggle.active { background: #388BFD; }
+    .peer-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+    .peer-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:960px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#16A34A;color:#fff">📞</div>
+      <div>
+        <h1>Voice & Video Calls</h1>
+        <div class="wd-sub">Device Link LAN P2P Audio/Video Calling · Encrypted Direct Streams</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <span class="wd-small" id="linkStatusText" style="color:#10B981;font-weight:700">● Device Link Ready</span>
+    </div>
+
+    <!-- Active Call Screen -->
+    <div class="call-stage" id="callStage">
+      <video class="remote-video" id="remoteVideo" autoplay playsinline></video>
+      <div id="callOverlayText" style="position:absolute;color:#fff;text-align:center">
+        <div style="font-size:36px;margin-bottom:8px">📱</div>
+        <div style="font-size:18px;font-weight:700" id="callWithText">Ready to Call</div>
+        <div class="wd-small" style="opacity:.8" id="callDuration">Select a paired device below to start video/audio call</div>
+      </div>
+
+      <div class="local-pip" id="localPip" hidden>
+        <video class="local-video" id="localVideo" autoplay playsinline muted></video>
+      </div>
+
+      <div class="call-controls" id="callControls" hidden>
+        <button class="call-btn btn-toggle" id="btnToggleMic" title="Mute/Unmute Mic">🎤</button>
+        <button class="call-btn btn-toggle" id="btnToggleCam" title="Toggle Camera">📹</button>
+        <button class="call-btn btn-hangup" id="btnEndCall" title="End Call">📞</button>
+      </div>
+    </div>
+
+    <!-- Paired Peer Devices -->
+    <div style="margin-top:20px">
+      <span style="font-weight:700;font-size:15px">Paired Devices Available for Calling</span>
+      <div class="peer-list" id="peersList"></div>
+    </div>
+  </div>
+
+  <script src="/__webdeck/ui.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

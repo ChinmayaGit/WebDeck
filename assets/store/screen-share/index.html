@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screen Share</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .screen-stage { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; border: 1px solid var(--wd-border); }
+    .screen-video { width: 100%; height: 100%; object-fit: contain; }
+    .peers-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
+    .peer-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1040px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#2563EB;color:#fff">🖥️</div>
+      <div>
+        <h1>Screen Share</h1>
+        <div class="wd-sub">Wireless Display & Screen Mirroring Across Paired Devices</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnStartSharing">▶ Share This Screen</button>
+      <button class="wd-btn" id="btnStopSharing" style="display:none">⏹ Stop Sharing</button>
+    </div>
+
+    <!-- Active Video Display Stage -->
+    <div class="screen-stage" id="screenStage">
+      <video class="screen-video" id="screenVideo" autoplay playsinline></video>
+      <div id="idleNotice" style="position:absolute;text-align:center;color:#fff">
+        <div style="font-size:44px;margin-bottom:8px">🖥️</div>
+        <div style="font-size:18px;font-weight:700">Screen Mirroring Idle</div>
+        <div class="wd-small" style="opacity:.8;margin-top:4px">Click "Share This Screen" above or select a peer below to stream to</div>
+      </div>
+    </div>
+
+    <!-- Target Devices -->
+    <div style="margin-top:20px">
+      <span style="font-weight:700;font-size:15px">Available Paired Displays</span>
+      <div class="peers-list" id="peersGrid"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "id": "font-converter",
+  "name": "Font Converter & Inspector",
+  "version": "1.0.0",
+  "description": "Convert TTF and OTF fonts to WOFF and WOFF2 web fonts. Inspect glyphs, test typography live, and generate ready-to-use @font-face CSS.",
+  "category": "Developer",
+  "icon": "text",
+  "color": "#64748B",
+  "permissions": ["files"],
+  "essential": false,
+  "author": "WebDeck"
+}

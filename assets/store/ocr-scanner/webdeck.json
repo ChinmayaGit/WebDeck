@@ -1,0 +1,12 @@
+{
+  "id": "ocr-scanner",
+  "name": "OCR Text Scanner",
+  "version": "1.0.0",
+  "description": "Turn photos, receipts, screenshots and scanned documents into searchable, copyable text offline.",
+  "category": "Documents",
+  "icon": "text",
+  "color": "#0EA5E9",
+  "permissions": ["files"],
+  "essential": true,
+  "author": "WebDeck"
+}
