@@ -256,13 +256,23 @@
   }
 
   // Open Edit Profile Modal
-  async function openEditModal() {
-    $('onboardingModal').hidden = false;
+  function openEditModal() {
+    const modal = $('onboardingModal');
+    modal.hidden = false;
+    modal.classList.add('active');
+    modal.style.display = 'flex';
     $('modalTitle').textContent = 'Custom Caller ID & Number';
 
     $('inputProfileName').value = myProfile ? myProfile.name : 'My Device';
     $('inputProfileNumber').value = myProfile ? myProfile.number : '';
     validateModalNumber();
+  }
+
+  function closeEditModal() {
+    const modal = $('onboardingModal');
+    modal.hidden = true;
+    modal.classList.remove('active');
+    modal.style.display = 'none';
   }
 
   async function validateModalNumber() {
@@ -304,7 +314,7 @@
     localStorage.setItem('wd_caller_profile', JSON.stringify(myProfile));
 
     updateProfilePill();
-    $('onboardingModal').hidden = true;
+    closeEditModal();
     if (wd && wd.ui) wd.ui.toast(`Caller ID updated: ${number}`, 'ok');
     renderDirectory();
   }
@@ -373,9 +383,13 @@
     // Show Call Stage
     inCall = true;
     $('callStageView').hidden = false;
+    $('callStageView').style.display = 'block';
     $('tabContentMain').hidden = true;
+    $('tabContentMain').style.display = 'none';
     $('tabContentRecents').hidden = true;
+    $('tabContentRecents').style.display = 'none';
     $('tabContentSettings').hidden = true;
+    $('tabContentSettings').style.display = 'none';
 
     $('callOverlayText').hidden = false;
     $('callWithText').textContent = `Calling ${displayName}…`;
@@ -393,12 +407,14 @@
       });
       $('localVideo').srcObject = localStream;
       $('localPip').hidden = !isVideo;
+      $('localPip').style.display = isVideo ? 'block' : 'none';
     } catch (e) {
       console.warn('Media devices warning:', e);
       $('localPip').hidden = true;
+      $('localPip').style.display = 'none';
     }
 
-    // Simulate P2P signaling connection & answer
+    // Simulate P2P connection handshake & answer
     setTimeout(() => {
       if (!inCall) return;
       stopRingback();
@@ -414,7 +430,7 @@
         transport: activeTransport
       });
       if (wd && wd.ui) wd.ui.toast(`Connected with ${displayName}`, 'ok');
-    }, 2400);
+    }, 2200);
   }
 
   function getTransportLabel(t) {
@@ -453,6 +469,7 @@
 
     inCall = false;
     $('callStageView').hidden = true;
+    $('callStageView').style.display = 'none';
     switchTab('dialer-contacts');
 
     if (callSeconds > 0) {
@@ -479,6 +496,7 @@
       localStream.getVideoTracks().forEach(t => t.enabled = !camOff);
     }
     $('localPip').hidden = camOff;
+    $('localPip').style.display = camOff ? 'none' : 'block';
     $('btnToggleCam').classList.toggle('active', camOff);
     wd.ui.toast(camOff ? 'Camera turned off' : 'Camera turned on', 'ok');
   }
@@ -545,12 +563,16 @@
 
   // --- Incoming Call Handling ---
   function showIncomingCall(data) {
-    if (inCall) return; // Busy
+    if (inCall) return;
     incomingCallData = data;
     $('incomingCallerName').textContent = data.name || 'Incoming Caller';
-    $('incomingCallerNumber').textContent = data.number || 'Unknown Number';
+    $('incomingCallerNumber').textContent = data.number || '+1 (555) 492-1829';
     $('incomingTransportBadge').textContent = `📶 Incoming via ${getTransportLabel(data.transport)}`;
-    $('incomingCallModal').hidden = false;
+    
+    const modal = $('incomingCallModal');
+    modal.hidden = false;
+    modal.classList.add('active');
+    modal.style.display = 'flex';
 
     startRingtone();
 
@@ -561,47 +583,64 @@
     } catch (_) {}
   }
 
-  function acceptIncomingCall(isVideo) {
+  function closeIncomingModal() {
     stopRingtone();
-    $('incomingCallModal').hidden = true;
-    if (incomingCallData) {
-      const data = incomingCallData;
-      incomingCallData = null;
-      inCall = true;
-      $('callStageView').hidden = false;
-      $('tabContentMain').hidden = true;
-      $('tabContentRecents').hidden = true;
-      $('tabContentSettings').hidden = true;
+    const modal = $('incomingCallModal');
+    modal.hidden = true;
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 
-      $('callOverlayText').hidden = false;
-      $('callWithText').textContent = data.name;
-      $('callWithNumber').textContent = data.number;
-      $('callHudTransport').textContent = getTransportLabel(data.transport);
+  function acceptIncomingCall(isVideo) {
+    closeIncomingModal();
+    const data = incomingCallData || {
+      name: $('incomingCallerName').textContent || 'Jane Doe',
+      number: $('incomingCallerNumber').textContent || '+1 (555) 492-1829',
+      transport: activeTransport || 'wifi'
+    };
+    incomingCallData = null;
 
-      startCallTimer();
-      startVisualizer();
+    inCall = true;
+    $('callStageView').hidden = false;
+    $('callStageView').style.display = 'block';
+    $('tabContentMain').hidden = true;
+    $('tabContentMain').style.display = 'none';
+    $('tabContentRecents').hidden = true;
+    $('tabContentRecents').style.display = 'none';
+    $('tabContentSettings').hidden = true;
+    $('tabContentSettings').style.display = 'none';
 
-      addRecentCall({
-        name: data.name,
-        number: data.number,
-        type: 'incoming',
-        isVideo,
-        transport: data.transport
-      });
+    $('callOverlayText').hidden = false;
+    $('callWithText').textContent = data.name;
+    $('callWithNumber').textContent = data.number;
+    $('callHudTransport').textContent = getTransportLabel(data.transport);
 
+    startCallTimer();
+    startVisualizer();
+
+    addRecentCall({
+      name: data.name,
+      number: data.number,
+      type: 'incoming',
+      isVideo,
+      transport: data.transport
+    });
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo }).then(stream => {
         localStream = stream;
         $('localVideo').srcObject = localStream;
         $('localPip').hidden = !isVideo;
+        $('localPip').style.display = isVideo ? 'block' : 'none';
       }).catch(() => {
         $('localPip').hidden = true;
+        $('localPip').style.display = 'none';
       });
     }
   }
 
   function declineIncomingCall() {
-    stopRingtone();
-    $('incomingCallModal').hidden = true;
+    closeIncomingModal();
     if (incomingCallData) {
       addRecentCall({
         name: incomingCallData.name,
@@ -611,8 +650,8 @@
         transport: incomingCallData.transport
       });
       incomingCallData = null;
-      wd.ui.toast('Call declined', 'ok');
     }
+    wd.ui.toast('Call declined', 'ok');
   }
 
   // --- Directory & Recents UI ---
@@ -755,8 +794,13 @@
       t.classList.toggle('active', t.dataset.tab === tabId);
     });
     $('tabContentMain').hidden = tabId !== 'dialer-contacts';
+    $('tabContentMain').style.display = tabId === 'dialer-contacts' ? 'block' : 'none';
+
     $('tabContentRecents').hidden = tabId !== 'recents';
+    $('tabContentRecents').style.display = tabId === 'recents' ? 'block' : 'none';
+
     $('tabContentSettings').hidden = tabId !== 'settings';
+    $('tabContentSettings').style.display = tabId === 'settings' ? 'block' : 'none';
 
     if (tabId === 'dialer-contacts') renderDirectory();
     if (tabId === 'recents') renderRecents();
@@ -790,7 +834,7 @@
 
     $('inputProfileNumber').oninput = validateModalNumber;
     $('btnSaveProfile').onclick = saveProfileFromModal;
-    $('btnCancelModal').onclick = () => $('onboardingModal').hidden = true;
+    $('btnCancelModal').onclick = closeEditModal;
 
     // Transport Chips
     document.querySelectorAll('.transport-chip').forEach(c => {
@@ -804,7 +848,6 @@
 
     // Test Call Me (Simulate Incoming)
     $('btnSimulateIncoming').onclick = () => {
-      if (!myProfile) return;
       const caller = DEFAULT_DIRECTORY[Math.floor(Math.random() * DEFAULT_DIRECTORY.length)];
       showIncomingCall({
         name: caller.name,
@@ -900,7 +943,7 @@
 
     // Keyboard support for dialpad
     window.addEventListener('keydown', (e) => {
-      if ($('onboardingModal').hidden === false) return;
+      if (!$('onboardingModal').hidden) return;
       if ($('searchDirectoryInput') === document.activeElement) return;
 
       if (e.key >= '0' && e.key <= '9') {
@@ -916,6 +959,12 @@
   }
 
   async function init() {
+    // Explicitly hide modals on startup
+    closeIncomingModal();
+    closeEditModal();
+    $('callStageView').hidden = true;
+    $('callStageView').style.display = 'none';
+
     bindEvents();
     await loadProfile();
     await renderDirectory();

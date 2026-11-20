@@ -6,6 +6,11 @@
   <title>Voice & Video Calls</title>
   <link rel="stylesheet" href="/__webdeck/ui.css">
   <style>
+    /* Absolute rule for hidden elements */
+    [hidden] {
+      display: none !important;
+    }
+
     /* Profile banner */
     .profile-pill {
       display: inline-flex;
@@ -349,17 +354,20 @@
     .btn-toggle:hover { background: rgba(255,255,255,.25); }
     .btn-toggle.active { background: #EF4444; }
 
-    /* Modal */
+    /* Modals - Hidden by default unless active */
     .call-modal-overlay {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,.75);
       backdrop-filter: blur(8px);
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       z-index: 1000;
       padding: 20px;
+    }
+    .call-modal-overlay.active {
+      display: flex !important;
     }
     .call-modal {
       background: var(--wd-bg, #0F172A);
@@ -422,7 +430,7 @@
     </div>
 
     <!-- Active Call Screen (Visible during active call) -->
-    <div id="callStageView" hidden style="margin-bottom:24px">
+    <div id="callStageView" hidden style="margin-bottom:24px;display:none">
       <div class="call-stage" id="callStage">
         <canvas class="audio-visualizer-canvas" id="audioVisualizer"></canvas>
         <video class="remote-video" id="remoteVideo" autoplay playsinline></video>
@@ -444,7 +452,7 @@
         </div>
 
         <!-- Local Camera PIP -->
-        <div class="local-pip" id="localPip" hidden>
+        <div class="local-pip" id="localPip" hidden style="display:none">
           <video class="local-video" id="localVideo" autoplay playsinline muted></video>
         </div>
 
@@ -537,7 +545,7 @@
     </div>
 
     <!-- Tab 2: Recent Calls -->
-    <div id="tabContentRecents" hidden>
+    <div id="tabContentRecents" hidden style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <span style="font-size:13px;color:var(--wd-muted)" id="recentsCountText">All call history saved locally</span>
         <button class="wd-btn wd-btn-sm" id="btnClearRecents">Clear History</button>
@@ -546,7 +554,7 @@
     </div>
 
     <!-- Tab 3: Network & Audio Settings -->
-    <div id="tabContentSettings" hidden>
+    <div id="tabContentSettings" hidden style="display:none">
       <div class="wd-card" style="margin-bottom:14px">
         <h3 style="margin-top:0">Caller Profile & Number</h3>
         <p class="wd-muted wd-small">Your assigned Caller ID is your unique identifier across Internet, Wi-Fi, Bluetooth, and Radiowave mesh networks.</p>
@@ -590,8 +598,8 @@
 
   </div>
 
-  <!-- Caller ID Setup / Edit Modal (Only shown on-demand) -->
-  <div class="call-modal-overlay" id="onboardingModal" hidden>
+  <!-- Caller ID Setup / Edit Modal (Hidden by default) -->
+  <div class="call-modal-overlay" id="onboardingModal" hidden style="display:none">
     <div class="call-modal">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div style="font-size:32px">📱</div>
@@ -626,8 +634,8 @@
     </div>
   </div>
 
-  <!-- Incoming Call Modal -->
-  <div class="call-modal-overlay" id="incomingCallModal" hidden>
+  <!-- Incoming Call Modal (Hidden by default) -->
+  <div class="call-modal-overlay" id="incomingCallModal" hidden style="display:none">
     <div class="call-modal" style="text-align:center;max-width:380px">
       <div class="incoming-pulse" style="width:84px;height:84px;border-radius:50%;background:#16A34A;display:grid;place-items:center;font-size:40px;color:#fff;margin:0 auto 16px">
         📞
