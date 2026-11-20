@@ -27,6 +27,7 @@ class StoreEntry {
   final String? downloadUrl;
   final String? sha256;
   final bool featured;
+  final bool essential;
 
   const StoreEntry({
     required this.manifest,
@@ -35,6 +36,7 @@ class StoreEntry {
     this.downloadUrl,
     this.sha256,
     this.featured = false,
+    this.essential = false,
   });
 
   String get id => manifest.id;
@@ -177,6 +179,9 @@ class StoreService extends ChangeNotifier {
     final featured = ((catalog['featured'] as List?) ?? const [])
         .cast<String>()
         .toSet();
+    final essential = ((catalog['essential'] as List?) ?? const [])
+        .cast<String>()
+        .toSet();
     _addCategories(catalog['categories']);
     _upcoming = ((catalog['upcoming'] as List?) ?? const [])
         .whereType<Map<String, dynamic>>()
@@ -185,16 +190,16 @@ class StoreService extends ChangeNotifier {
     final out = <StoreEntry>[];
     for (final id in (catalog['apps'] as List).cast<String>()) {
       final dir = 'assets/store/$id';
-      final manifest = WebDeckManifest.fromJson(
-        jsonDecode(await _bundle.loadString('$dir/webdeck.json'))
-            as Map<String, dynamic>,
-      );
+      final rawManifest = jsonDecode(await _bundle.loadString('$dir/webdeck.json'))
+          as Map<String, dynamic>;
+      final manifest = WebDeckManifest.fromJson(rawManifest);
       out.add(
         StoreEntry(
           manifest: manifest,
           catalog: 'WebDeck',
           assetDir: dir,
           featured: featured.contains(id),
+          essential: essential.contains(id) || (rawManifest['essential'] == true),
         ),
       );
     }
@@ -221,6 +226,7 @@ class StoreService extends ChangeNotifier {
           downloadUrl: Uri.parse(url).resolve(download).toString(),
           sha256: raw['sha256'] as String?,
           featured: raw['featured'] as bool? ?? false,
+          essential: raw['essential'] as bool? ?? false,
         ),
       );
     }

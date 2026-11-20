@@ -13,6 +13,7 @@ class SettingsService extends ChangeNotifier {
   bool _developerMode = false;
   bool _backgroundJobs = true;
   bool _systemNotifications = true;
+  bool _showFeeds = true;
   List<String> _catalogUrls = const [];
   bool _loaded = false;
 
@@ -20,6 +21,7 @@ class SettingsService extends ChangeNotifier {
   bool get developerMode => _developerMode;
   bool get backgroundJobs => _backgroundJobs;
   bool get systemNotifications => _systemNotifications;
+  bool get showFeeds => _showFeeds;
 
   /// Extra remote store catalogs (JSON) merged with the built-in catalog.
   List<String> get catalogUrls => List.unmodifiable(_catalogUrls);
@@ -35,6 +37,7 @@ class SettingsService extends ChangeNotifier {
         _developerMode = json['developerMode'] as bool? ?? false;
         _backgroundJobs = json['backgroundJobs'] as bool? ?? true;
         _systemNotifications = json['systemNotifications'] as bool? ?? true;
+        _showFeeds = json['showFeeds'] as bool? ?? true;
         _catalogUrls = (json['catalogUrls'] as List?)?.cast<String>() ?? const [];
       }
     } catch (_) {
@@ -51,11 +54,17 @@ class SettingsService extends ChangeNotifier {
         'developerMode': _developerMode,
         'backgroundJobs': _backgroundJobs,
         'systemNotifications': _systemNotifications,
+        'showFeeds': _showFeeds,
         'catalogUrls': _catalogUrls,
       }),
       flush: true,
     );
     notifyListeners();
+  }
+
+  Future<void> setShowFeeds(bool val) async {
+    _showFeeds = val;
+    await _save();
   }
 
   Future<void> setDeveloperMode(bool v) async {

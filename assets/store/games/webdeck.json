@@ -1,0 +1,15 @@
+{
+  "id": "games",
+  "name": "Game Tracker & Hidden Gems",
+  "version": "1.0.0",
+  "description": "Track games played, playing, half played and backlog. Record store bought on (Steam, Epic, PlayStation, Xbox, Switch), access tips & tricks, walkthrough maps, trailers, and discover hidden gems. Add by name, JSON, or screenshot.",
+  "category": "Games",
+  "icon": "game",
+  "color": "#7C3AED",
+  "permissions": [
+    "net",
+    "files"
+  ],
+  "essential": false,
+  "author": "WebDeck"
+}

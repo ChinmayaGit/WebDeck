@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Tracker & Hidden Gems</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 14px; }
+    .card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s ease; }
+    .card:hover { transform: translateY(-2px); border-color: var(--wd-primary); }
+    .banner-wrap { position: relative; width: 100%; aspect-ratio: 16/9; background: var(--wd-surface-2); display: flex; align-items: center; justify-content: center; font-size: 38px; }
+    .banner { width: 100%; height: 100%; object-fit: cover; }
+    .score-badge { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.8); color: #10B981; padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+    .card-body { padding: 12px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
+    .title { font-weight: 700; font-size: 15px; }
+    .meta { font-size: 12px; color: var(--wd-muted); }
+    .stores { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .store { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .s-steam { background: #1b2838; color: #66c0f4; border: 1px solid #66c0f4; }
+    .s-epic { background: #333; color: #fff; }
+    .s-playstation { background: #003791; color: #fff; }
+    .s-xbox { background: #107c10; color: #fff; }
+    .s-switch { background: #e60012; color: #fff; }
+    .s-gog { background: #7c2582; color: #fff; }
+    .actions { margin-top: auto; display: flex; gap: 6px; padding-top: 8px; align-items: center; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: grid; place-items: center; z-index: 100; padding: 16px; }
+    .modal[hidden] { display: none; }
+    .modal-box { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px; }
+    .trailer-box { max-width: 760px; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; }
+    .trailer-box iframe { width: 100%; height: 100%; border: none; }
+    .status-select { font-size: 11px; padding: 3px 6px; border-radius: 6px; background: var(--wd-surface-2); color: inherit; border: 1px solid var(--wd-border); }
+    .tips-box { background: var(--wd-surface-2); border-left: 3px solid var(--wd-primary); padding: 8px 12px; border-radius: 4px; font-size: 12px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1160px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#7C3AED;color:#fff">🎮</div>
+      <div>
+        <h1>Game Tracker & Hidden Gems</h1>
+        <div class="wd-sub">Played, Playing, Half Played & Backlog · Stores & Platforms · Tips, Tricks & Interactive Maps</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnOpenAdd">+ Add Game</button>
+      <button class="wd-btn" id="btnImportSS">📷 Add by SS</button>
+      <button class="wd-btn" id="btnBackup">Export JSON</button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="wd-row" style="margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <div class="wd-tabs">
+        <button class="wd-tab" data-filter="all" aria-selected="true">All (<span id="cntAll">0</span>)</button>
+        <button class="wd-tab" data-filter="playing" aria-selected="false">Playing (<span id="cntPlaying">0</span>)</button>
+        <button class="wd-tab" data-filter="halfplayed" aria-selected="false">Half Played (<span id="cntHalf">0</span>)</button>
+        <button class="wd-tab" data-filter="played" aria-selected="false">Completed (<span id="cntPlayed">0</span>)</button>
+        <button class="wd-tab" data-filter="backlog" aria-selected="false">Backlog (<span id="cntBacklog">0</span>)</button>
+        <button class="wd-tab" data-filter="gems" aria-selected="false">💎 Hidden Gems</button>
+      </div>
+      <div class="wd-spacer"></div>
+      <input type="text" id="searchInput" class="wd-input" style="max-width:240px" placeholder="Search game or genre…">
+    </div>
+
+    <!-- Hidden Gems Category Filter -->
+    <div id="gemsFilters" class="wd-row" style="margin-bottom:12px;gap:6px;display:none;flex-wrap:wrap">
+      <span class="wd-small wd-muted">Genre:</span>
+      <button class="wd-btn wd-btn-sm" data-genre="all">All Gems</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Indie">Indie</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Metroidvania">Metroidvania</button>
+      <button class="wd-btn wd-btn-sm" data-genre="RPG">RPG</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Strategy">Strategy</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Puzzle">Puzzle</button>
+    </div>
+
+    <!-- Games Grid -->
+    <div class="grid" id="gameGrid"></div>
+  </div>
+
+  <!-- Add Game Modal -->
+  <div class="modal" id="addModal" hidden>
+    <div class="modal-box">
+      <div class="wd-row" style="margin-bottom:14px">
+        <h3 style="margin:0">Add Game</h3>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-ghost wd-btn-sm" id="closeAddModal">✕</button>
+      </div>
+      <form id="addForm" style="display:flex;flex-direction:column;gap:10px">
+        <label>
+          <span class="wd-small">Game Title *</span>
+          <input type="text" class="wd-input wd-grow" id="gTitle" required placeholder="e.g. Elden Ring, Hollow Knight, Hades">
+        </label>
+        <div class="wd-row" style="gap:10px">
+          <label style="flex:1">
+            <span class="wd-small">Status</span>
+            <select class="wd-input" id="gStatus">
+              <option value="playing">Playing</option>
+              <option value="halfplayed">Half Played</option>
+              <option value="played">Completed / Beaten</option>
+              <option value="backlog">Backlog</option>
+              <option value="wishlist">Wishlist</option>
+            </select>
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Score (1-10)</span>
+            <input type="number" step="0.1" class="wd-input" id="gScore" placeholder="9.5">
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Hours Played</span>
+            <input type="number" class="wd-input" id="gHours" placeholder="42">
+          </label>
+        </div>
+        <label>
+          <span class="wd-small">Store Bought In / Owned Platform</span>
+          <input type="text" class="wd-input" id="gStores" placeholder="Steam, Epic Games, PS5, Xbox Series X, Switch, GOG">
+        </label>
+        <label>
+          <span class="wd-small">Genre(s)</span>
+          <input type="text" class="wd-input" id="gGenre" placeholder="Action RPG, Souls-like, Roguelike">
+        </label>
+        <label>
+          <span class="wd-small">Banner Image URL</span>
+          <input type="url" class="wd-input" id="gBanner" placeholder="https://… or leave blank for auto">
+        </label>
+        <label>
+          <span class="wd-small">YouTube Gameplay / Trailer URL</span>
+          <input type="text" class="wd-input" id="gTrailer" placeholder="https://www.youtube.com/watch?v=…">
+        </label>
+        <label>
+          <span class="wd-small">Interactive Map / Guide URL</span>
+          <input type="url" class="wd-input" id="gMapUrl" placeholder="https://mapgenie.io/… or wiki guide link">
+        </label>
+        <label>
+          <span class="wd-small">Tips, Tricks & Secrets Notes</span>
+          <textarea class="wd-input" id="gTips" rows="2" placeholder="Don't miss the hidden illusory wall behind the waterfall…"></textarea>
+        </label>
+        <div class="wd-row" style="margin-top:10px;gap:8px">
+          <button type="submit" class="wd-btn wd-btn-primary wd-grow">Save Game</button>
+          <button type="button" class="wd-btn" id="btnCancelAdd">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Trailer Player Modal -->
+  <div class="modal" id="trailerModal" hidden>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;max-width:760px;width:100%">
+      <button class="wd-btn wd-btn-ghost" id="closeTrailerModal" style="color:#fff;margin-bottom:8px">✕ Close Trailer</button>
+      <div class="trailer-box" id="trailerContainer"></div>
+    </div>
+  </div>
+
+  <input type="file" id="ssFileInput" accept="image/*" style="display:none">
+
+  <script src="app.js"></script>
+</body>
+</html>

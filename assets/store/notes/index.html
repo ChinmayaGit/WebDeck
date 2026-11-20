@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markdown Notes & Checklists</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .layout { display: flex; gap: 16px; height: calc(100vh - 120px); min-height: 500px; }
+    .sidebar { width: 300px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--wd-border); padding-right: 14px; overflow-y: auto; flex: none; }
+    .editor-pane { flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    .note-item { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 10px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: border-color .15s ease; border-left-width: 4px; }
+    .note-item:hover { border-color: var(--wd-primary); }
+    .note-item.active { background: var(--wd-surface-2); border-color: var(--wd-primary); }
+    .note-title { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .note-snippet { font-size: 12px; color: var(--wd-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .note-input-title { font-size: 22px; font-weight: 800; border: none; background: transparent; color: inherit; outline: none; padding: 4px 0; border-bottom: 1px solid var(--wd-border); width: 100%; }
+    .note-textarea { flex: 1; width: 100%; border: none; background: transparent; color: inherit; outline: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; font-size: 15px; line-height: 1.6; resize: none; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1160px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#EAB308;color:#000">📝</div>
+      <div>
+        <h1>Notes & Checklists</h1>
+        <div class="wd-sub">Fast Markdown Notes · Auto-save · Tags · Export .md</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnNewNote">+ New Note</button>
+      <button class="wd-btn" id="btnExportMd">⬇ Export .md</button>
+      <button class="wd-btn wd-btn-ghost" id="btnDeleteNote" title="Delete current note">🗑</button>
+    </div>
+
+    <div class="layout">
+      <!-- Notes List Sidebar -->
+      <div class="sidebar">
+        <input type="text" id="searchInput" class="wd-input" placeholder="Search notes…">
+        <div id="notesList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <!-- Editor Area -->
+      <div class="editor-pane">
+        <div class="wd-row" style="gap:8px">
+          <input type="text" id="noteTitle" class="note-input-title" placeholder="Note Title…">
+          <select id="noteColorSelect" class="wd-input" style="max-width:130px;font-size:12px">
+            <option value="#EAB308">🟡 Yellow</option>
+            <option value="#388BFD">🔵 Blue</option>
+            <option value="#10B981">🟢 Green</option>
+            <option value="#EC4899">🌸 Pink</option>
+            <option value="#8B5CF6">🟣 Purple</option>
+          </select>
+        </div>
+        <textarea id="noteContent" class="note-textarea" placeholder="Write markdown or checklist items here…
+# Example Heading
+- [ ] Task 1
+- [x] Task 2 completed
+**Bold idea** or code snippet:
+```bash
+echo 'Hello WebDeck'
+```"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

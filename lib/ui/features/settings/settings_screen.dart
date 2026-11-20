@@ -48,6 +48,13 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
+                          title: const Text('Learning Feeds'),
+                          subtitle: const Text('Show curated tech, science, engineering, and research concept feeds in the navigation sidebar.'),
+                          value: settings.showFeeds,
+                          onChanged: settings.setShowFeeds,
+                        ),
+                        const Divider(height: 1),
+                        SwitchListTile(
                           title: const Text('Developer mode'),
                           subtitle: const Text(
                               'Sideload any web project from GitHub, a zip or a folder, with companion backends and Database Studio.'),

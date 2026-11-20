@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compass & Digital Level</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .compass-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
+    .dial-wrap { position: relative; width: 320px; height: 320px; border-radius: 50%; background: radial-gradient(circle, var(--wd-surface) 60%, var(--wd-surface-2) 100%); border: 4px solid var(--wd-border); box-shadow: 0 8px 32px rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
+    .dial { position: absolute; inset: 0; border-radius: 50%; transition: transform 0.1s ease-out; }
+    .needle { position: absolute; width: 10px; height: 140px; top: 20px; left: calc(50% - 5px); border-radius: 5px; transform-origin: bottom center; }
+    .needle-north { height: 70px; background: #EF4444; border-radius: 5px 5px 0 0; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+    .needle-south { height: 70px; background: #E2E8F0; border-radius: 0 0 5px 5px; clip-path: polygon(0% 0%, 100% 0%, 50% 100%); }
+    .center-pin { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #059669; border: 3px solid #fff; z-index: 5; }
+    .heading-display { font-size: 48px; font-weight: 800; font-family: monospace; color: var(--wd-primary); margin-top: 18px; }
+    .cardinal-display { font-size: 22px; font-weight: 700; color: #EF4444; }
+    .level-box { margin-top: 24px; background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; padding: 16px 24px; max-width: 480px; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+    .bubble-level { width: 100%; height: 28px; background: var(--wd-surface-2); border-radius: 14px; position: relative; border: 1px solid var(--wd-border); overflow: hidden; }
+    .bubble { width: 34px; height: 24px; border-radius: 12px; background: #10B981; position: absolute; top: 1px; left: calc(50% - 17px); transition: left .1s ease-out; }
+    .level-center-mark { position: absolute; left: calc(50% - 1px); top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.4); }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:800px;text-align:center">
+    <div class="wd-header" style="justify-content:center">
+      <div class="wd-icon" style="background:#059669;color:#fff">🧭</div>
+      <div>
+        <h1>Digital Compass & Level</h1>
+        <div class="wd-sub">Real-Time Heading & Surface Bubble Level</div>
+      </div>
+    </div>
+
+    <div class="compass-container">
+      <!-- Dial -->
+      <div class="dial-wrap">
+        <svg class="dial" id="compassDial" viewBox="0 0 320 320">
+          <!-- Degree ticks -->
+          <circle cx="160" cy="160" r="150" fill="none" stroke="var(--wd-border)" stroke-width="2"/>
+          <text x="160" y="32" text-anchor="middle" fill="#EF4444" font-weight="900" font-size="20">N</text>
+          <text x="290" y="167" text-anchor="middle" fill="var(--wd-text)" font-weight="700" font-size="18">E</text>
+          <text x="160" y="302" text-anchor="middle" fill="var(--wd-text)" font-weight="700" font-size="18">S</text>
+          <text x="32" y="167" text-anchor="middle" fill="var(--wd-text)" font-weight="700" font-size="18">W</text>
+          <text x="250" y="75" text-anchor="middle" fill="var(--wd-muted)" font-size="12">NE</text>
+          <text x="250" y="260" text-anchor="middle" fill="var(--wd-muted)" font-size="12">SE</text>
+          <text x="70" y="260" text-anchor="middle" fill="var(--wd-muted)" font-size="12">SW</text>
+          <text x="70" y="75" text-anchor="middle" fill="var(--wd-muted)" font-size="12">NW</text>
+        </svg>
+
+        <div class="needle" id="needle">
+          <div class="needle-north"></div>
+          <div class="needle-south"></div>
+        </div>
+        <div class="center-pin"></div>
+      </div>
+
+      <!-- Heading -->
+      <div class="heading-display" id="headingDegrees">000°</div>
+      <div class="cardinal-display" id="headingCardinal">NORTH</div>
+
+      <!-- Bubble Level -->
+      <div class="level-box">
+        <div class="wd-row">
+          <span style="font-weight:700;font-size:14px">Surface Bubble Level</span>
+          <div class="wd-spacer"></div>
+          <span id="levelDegrees" class="wd-small wd-muted">Pitch: 0° | Roll: 0°</span>
+        </div>
+        <div class="bubble-level">
+          <div class="level-center-mark"></div>
+          <div class="bubble" id="levelBubble"></div>
+        </div>
+        <div class="wd-row" style="margin-top:6px;gap:8px;justify-content:center">
+          <button class="wd-btn wd-btn-sm" id="btnCalibrate">Calibrate Level</button>
+          <button class="wd-btn wd-btn-sm" id="btnToggleSimulate">Toggle Live / Demo</button>
+        </div>
+      </div>
+
+      <!-- Geolocation Coordinates -->
+      <div style="margin-top:14px;font-size:12px;color:var(--wd-muted)" id="coordsDisplay">
+        Coordinates: Acquiring GPS latitude & longitude…
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

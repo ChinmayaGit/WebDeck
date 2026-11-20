@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bookings & Ticket Tracker</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 14px; }
+    .ticket-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+    .ticket-card:hover { border-color: var(--wd-primary); }
+    .type-badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; text-transform: uppercase; }
+    .type-flight { background: #388BFD15; color: #388BFD; }
+    .type-train { background: #10B98115; color: #10B981; }
+    .type-movie { background: #F43F5E15; color: #F43F5E; }
+    .type-doctor { background: #8B5CF615; color: #8B5CF6; }
+    .type-hotel { background: #F59E0B15; color: #F59E0B; }
+    .countdown-pill { font-size: 12px; font-weight: 700; color: #F59E0B; background: rgba(245,158,11,.1); padding: 4px 10px; border-radius: 20px; }
+    .qr-container { background: #fff; padding: 8px; border-radius: 8px; display: inline-block; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: grid; place-items: center; z-index: 100; padding: 16px; }
+    .modal[hidden] { display: none; }
+    .modal-box { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1160px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#6366F1;color:#fff">🎟️</div>
+      <div>
+        <h1>Bookings & Ticket Tracker</h1>
+        <div class="wd-sub">Flights · Trains · Movies · Hotels · Doctor Appointments · Gate QR Pass</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnOpenAdd">+ Add Booking</button>
+      <button class="wd-btn" id="btnExportJson">Export JSON</button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="wd-row" style="margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <div class="wd-tabs">
+        <button class="wd-tab" data-filter="all" aria-selected="true">All (<span id="cntAll">0</span>)</button>
+        <button class="wd-tab" data-filter="flight" aria-selected="false">✈️ Flights</button>
+        <button class="wd-tab" data-filter="train" aria-selected="false">🚆 Trains</button>
+        <button class="wd-tab" data-filter="movie" aria-selected="false">🍿 Movies</button>
+        <button class="wd-tab" data-filter="doctor" aria-selected="false">🩺 Doctor</button>
+        <button class="wd-tab" data-filter="hotel" aria-selected="false">🏨 Hotels</button>
+      </div>
+      <div class="wd-spacer"></div>
+      <input type="text" id="searchInput" class="wd-input" style="max-width:240px" placeholder="Search booking or PNR…">
+    </div>
+
+    <!-- Bookings Grid -->
+    <div class="grid" id="bookingsGrid"></div>
+  </div>
+
+  <!-- Add Booking Modal -->
+  <div class="modal" id="addModal" hidden>
+    <div class="modal-box">
+      <div class="wd-row" style="margin-bottom:12px">
+        <h3 style="margin:0">Add Booking or Appointment</h3>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-ghost wd-btn-sm" id="closeAddModal">✕</button>
+      </div>
+      <form id="addForm" style="display:flex;flex-direction:column;gap:10px">
+        <label>
+          <span class="wd-small">Type</span>
+          <select class="wd-input" id="bkType">
+            <option value="flight">Flight (Air Ticket)</option>
+            <option value="train">Train (IRCTC / Rail)</option>
+            <option value="movie">Movie / Cinema Ticket</option>
+            <option value="doctor">Doctor / Clinic Appointment</option>
+            <option value="hotel">Hotel / Stay Reservation</option>
+            <option value="event">Event / Concert Pass</option>
+          </select>
+        </label>
+        <label>
+          <span class="wd-small">Title / Route / Doctor *</span>
+          <input type="text" class="wd-input" id="bkTitle" required placeholder="e.g. AI-802 DEL → BLR, Dr. Sharma Clinic">
+        </label>
+        <div class="wd-row" style="gap:10px">
+          <label style="flex:1">
+            <span class="wd-small">Date & Time *</span>
+            <input type="datetime-local" class="wd-input" id="bkDatetime" required>
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">PNR / Ticket Ref / Code *</span>
+            <input type="text" class="wd-input" id="bkCode" required placeholder="e.g. W8K2LP">
+          </label>
+        </div>
+        <div class="wd-row" style="gap:10px">
+          <label style="flex:1">
+            <span class="wd-small">Seat / Coach / Room</span>
+            <input type="text" class="wd-input" id="bkSeat" placeholder="e.g. 14B, B3-42, Room 304">
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Terminal / Platform / Location</span>
+            <input type="text" class="wd-input" id="bkLocation" placeholder="Terminal 3 Gate 12">
+          </label>
+        </div>
+        <label>
+          <span class="wd-small">Notes / Instructions</span>
+          <textarea class="wd-input" id="bkNotes" rows="2" placeholder="Carry valid ID proof and medical reports…"></textarea>
+        </label>
+        <div class="wd-row" style="margin-top:10px;gap:8px">
+          <button type="submit" class="wd-btn wd-btn-primary wd-grow">Save Booking</button>
+          <button type="button" class="wd-btn" id="btnCancelAdd">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/__webdeck/vendor/qrcode.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

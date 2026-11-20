@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alpine Linux Runner & Host</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .terminal-window { background: #0F172A; border: 1px solid var(--wd-border); border-radius: 12px; display: flex; flex-direction: column; height: 380px; overflow: hidden; font-family: monospace; }
+    .term-top { background: #1E293B; padding: 8px 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94A3B8; }
+    .term-body { flex: 1; padding: 12px; overflow-y: auto; color: #F8FAFC; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+    .term-input-row { display: flex; align-items: center; background: #020617; padding: 6px 12px; border-top: 1px solid #1E293B; }
+    .term-input { flex: 1; background: transparent; border: none; color: #38BDF8; font-family: inherit; font-size: 13px; outline: none; }
+    .apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 16px; }
+    .app-host-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .app-host-card:hover { border-color: var(--wd-primary); }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot-live { background: #10B981; box-shadow: 0 0 8px #10B981; }
+    .dot-off { background: #64748B; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1160px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#0284C7;color:#fff">☁️</div>
+      <div>
+        <h1>Alpine Linux Runner & Live Host</h1>
+        <div class="wd-sub">Alpine Linux Environment · apk packages · Host Live Web Apps & Cloud Connect</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnDeployApp">+ Host New Live App</button>
+      <button class="wd-btn" id="btnRestartAlpine">⚡ Restart Alpine Environment</button>
+    </div>
+
+    <!-- Live Terminal Box -->
+    <div class="terminal-window">
+      <div class="term-top">
+        <span style="display:flex;gap:6px">
+          <span style="width:10px;height:10px;border-radius:50%;background:#EF4444;display:inline-block"></span>
+          <span style="width:10px;height:10px;border-radius:50%;background:#F59E0B;display:inline-block"></span>
+          <span style="width:10px;height:10px;border-radius:50%;background:#10B981;display:inline-block"></span>
+        </span>
+        <span style="margin-left:8px;font-weight:700">alpine-linux-v3.19 ~ # ash</span>
+        <div class="wd-spacer"></div>
+        <span class="wd-small" id="termSysInfo">RAM: 512MB · Kernel: 6.6.14-alpine</span>
+      </div>
+      <div class="term-body" id="termLogs"></div>
+      <form class="term-input-row" id="termForm">
+        <span style="color:#10B981;font-weight:700;margin-right:8px">alpine:#</span>
+        <input type="text" class="term-input" id="termInput" placeholder="Try: apk add python3, python3 -m http.server 8080, uname -a, ps aux…">
+      </form>
+    </div>
+
+    <!-- Live Apps Hosted -->
+    <div class="wd-row" style="margin-top:20px;margin-bottom:8px">
+      <span style="font-weight:700;font-size:16px">Hosted Live Applications & Microservices</span>
+      <div class="wd-spacer"></div>
+      <span class="wd-small wd-muted" id="liveAppsCount">3 apps online</span>
+    </div>
+
+    <div class="apps-grid" id="appsGrid"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

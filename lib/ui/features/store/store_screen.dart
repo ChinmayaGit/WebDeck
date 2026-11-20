@@ -19,17 +19,19 @@ class StoreScreen extends StatefulWidget {
 class _StoreScreenState extends State<StoreScreen> {
   String _query = '';
   String? _category;
+  bool _essentialOnly = false;
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<StoreService>();
     final catalog = context.watch<CatalogViewModel>();
     final installed = {for (final a in catalog.apps) a.id: a};
-    final browsing = _category == null && _query.isEmpty;
+    final browsing = _category == null && _query.isEmpty && !_essentialOnly;
 
     final entries =
         store.entries.where((e) {
           final m = e.manifest;
+          if (_essentialOnly && !e.essential) return false;
           if (_category != null && m.category != _category) return false;
           if (_query.isEmpty) return true;
           final q = _query.toLowerCase();
@@ -80,6 +82,38 @@ class _StoreScreenState extends State<StoreScreen> {
                   }
                 },
                 onRefresh: store.loading ? null : store.refresh,
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilterChip(
+                      selected: !_essentialOnly,
+                      label: Text('All Apps (${store.entries.length})'),
+                      selectedColor: WebDeckTheme.primary.withValues(alpha: 0.3),
+                      showCheckmark: false,
+                      onSelected: (_) => setState(() => _essentialOnly = false),
+                    ),
+                    FilterChip(
+                      selected: _essentialOnly,
+                      label: Text('★ Essential (${store.entries.where((e) => e.essential).length})'),
+                      selectedColor: WebDeckTheme.accentGreen.withValues(alpha: 0.3),
+                      showCheckmark: false,
+                      onSelected: (_) => setState(() => _essentialOnly = true),
+                    ),
+                    if (_category != null)
+                      Chip(
+                        label: Text('Category: $_category'),
+                        onDeleted: () => setState(() => _category = null),
+                        deleteIcon: const Icon(Icons.close, size: 14),
+                      ),
+                  ],
+                ),
               ),
             ),
             for (final err in store.catalogErrors.entries)
@@ -711,14 +745,38 @@ class _StoreCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          m.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                m.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (entry.essential)
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: WebDeckTheme.accentGreen.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: WebDeckTheme.accentGreen.withValues(alpha: 0.4)),
+                                ),
+                                child: const Text(
+                                  '★ Essential',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: WebDeckTheme.accentGreen,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         Text(
                           entry.featured
@@ -1182,11 +1240,26 @@ class _AppTile extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            m.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  m.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              if (entry.essential)
+                                const Text(
+                                  ' ★',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: WebDeckTheme.accentGreen,
+                                  ),
+                                ),
+                            ],
                           ),
                           Text(
                             m.supportsCurrentPlatform

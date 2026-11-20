@@ -1,0 +1,12 @@
+{
+  "id": "compass",
+  "name": "Compass & Digital Level",
+  "version": "1.0.0",
+  "description": "High-precision digital compass with cardinal directions, degree heading, surface bubble level, true/magnetic north, and GPS coordinates.",
+  "category": "Tools",
+  "icon": "compass",
+  "color": "#059669",
+  "permissions": [],
+  "essential": true,
+  "author": "WebDeck"
+}

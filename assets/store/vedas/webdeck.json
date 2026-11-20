@@ -1,0 +1,12 @@
+{
+  "id": "vedas",
+  "name": "Vedas & Sacred Wisdom",
+  "version": "1.0.0",
+  "description": "Rigveda, Samaveda, Yajurveda, Atharvaveda & Upanishads. Specially designed for seniors with extra-large high-contrast text, soothing audio recitation & chanting, English translations, and verse loop player.",
+  "category": "Books",
+  "icon": "veda",
+  "color": "#D97706",
+  "permissions": [],
+  "essential": false,
+  "author": "WebDeck"
+}

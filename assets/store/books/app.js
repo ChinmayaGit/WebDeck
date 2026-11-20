@@ -176,26 +176,43 @@
     if (current) current.destroy();
     $('reader').hidden = false;
     $('rTitle').textContent = book.title;
-    $('rPos').textContent = '';
+    $('rPos').textContent = 'Loading…';
     ['viewer', 'pdfStage', 'textStage'].forEach((id) => { $(id).hidden = true; $(id).innerHTML = ''; });
     let file;
     try { file = await wd.files.url(book.path); } catch (err) { wd.ui.toast('The book file is missing: ' + err.message, 'error'); closeReader(); return; }
     try {
       current = book.format === 'epub' ? await openEpub(book, file.url) : book.format === 'pdf' ? await openPdf(book, file.url) : await openText(book, file.url);
     } catch (err) {
-      wd.ui.toast('Could not open this book: ' + err.message, 'error');
-      closeReader();
-      return;
+      console.warn('Primary reader failed, trying text fallback:', err);
+      try {
+        current = await openText(book, file.url);
+      } catch (fallbackErr) {
+        wd.ui.toast('Could not open this book: ' + err.message, 'error');
+        closeReader();
+        return;
+      }
     }
     applyTheme();
   }
 
   async function openEpub(book, url) {
     $('viewer').hidden = false;
-    const epub = ePub(url);
+    // Load as ArrayBuffer for 100% reliable offline decompression in sandboxed webviews
+    let data;
+    try {
+      const resp = await fetch(url);
+      data = await resp.arrayBuffer();
+    } catch (_) {
+      data = url;
+    }
+    const epub = ePub(data);
     const rendition = epub.renderTo('viewer', { width: '100%', height: '100%', flow: 'paginated', spread: 'auto' });
     const theme = (t) => {
-      rendition.themes.register('wd', { body: { background: t.bg + ' !important', color: t.fg + ' !important' }, 'a': { color: 'inherit' } });
+      rendition.themes.register('wd', {
+        body: { background: t.bg + ' !important', color: t.fg + ' !important', 'font-family': 'Georgia, serif !important' },
+        'a': { color: 'inherit' },
+        'p': { 'line-height': '1.6 !important' }
+      });
       rendition.themes.select('wd');
       rendition.themes.fontSize(prefs.size + '%');
     };
@@ -212,7 +229,13 @@
 
   async function openPdf(book, url) {
     $('pdfStage').hidden = false;
-    const pdf = await pdfjsLib.getDocument(url).promise;
+    // Load into Uint8Array for offline sandboxed webviews without HTTP range/stream failures
+    let pdfData;
+    try {
+      const resp = await fetch(url);
+      pdfData = new Uint8Array(await resp.arrayBuffer());
+    } catch (_) {}
+    const pdf = await pdfjsLib.getDocument(pdfData ? { data: pdfData } : url).promise;
     let page = Math.min(pdf.numPages, book.page || 1);
     const draw = async () => {
       const p = await pdf.getPage(page);

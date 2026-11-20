@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manga & Comic Reader</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-top: 14px; }
+    .manga-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: transform .15s ease; }
+    .manga-card:hover { transform: translateY(-2px); border-color: var(--wd-primary); }
+    .cover-wrap { width: 100%; aspect-ratio: 2/3; background: var(--wd-surface-2); display: flex; align-items: center; justify-content: center; font-size: 38px; }
+    .cover { width: 100%; height: 100%; object-fit: cover; }
+    .card-info { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .title { font-weight: 700; font-size: 13px; line-height: 1.3; }
+
+    /* Reader Fullscreen Overlay */
+    #readerStage { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; }
+    #readerStage[hidden] { display: none; }
+    .reader-top { background: rgba(20,20,20,.85); backdrop-filter: blur(8px); padding: 10px 16px; display: flex; align-items: center; gap: 12px; color: #fff; z-index: 10; }
+    .reader-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 10px; }
+    .webtoon-page { max-width: 800px; width: 100%; height: auto; display: block; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,.5); }
+    .single-page-wrap { display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; }
+    .single-page-wrap img { max-width: 100%; max-height: calc(100vh - 80px); object-fit: contain; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1100px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#F43F5E;color:#fff">📖</div>
+      <div>
+        <h1>Manga & Comic Reader</h1>
+        <div class="wd-sub">Webtoon Continuous Strip · Single Page · CBZ/CBR/ZIP Reader</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnOpenFiles">+ Open CBZ / ZIP / Images</button>
+    </div>
+
+    <!-- Mode Selector & Shelf -->
+    <div class="wd-row" style="margin-bottom:12px;gap:8px">
+      <span style="font-weight:700">My Manga Library</span>
+      <div class="wd-spacer"></div>
+      <span class="wd-small wd-muted" id="mangaCount">0 titles</span>
+    </div>
+
+    <div class="shelf" id="mangaShelf"></div>
+  </div>
+
+  <!-- In-App Manga Reader -->
+  <div id="readerStage" hidden>
+    <div class="reader-top">
+      <button class="wd-btn wd-btn-ghost wd-btn-sm" id="btnCloseReader" style="color:#fff">← Close</button>
+      <span style="font-weight:700" id="readerTitle">Manga Title</span>
+      <div class="wd-spacer"></div>
+      <span class="wd-small" id="pageIndicator" style="opacity:.8">Page 1 / 10</span>
+      <select id="readerMode" class="wd-input" style="font-size:12px;background:#222;color:#fff;border-color:#444">
+        <option value="webtoon">Webtoon (Vertical Strip)</option>
+        <option value="single">Single Page</option>
+        <option value="double">Double Page (Manga R-to-L)</option>
+      </select>
+      <button class="wd-btn wd-btn-sm" id="btnPrevPage">‹ Prev</button>
+      <button class="wd-btn wd-btn-sm" id="btnNextPage">Next ›</button>
+    </div>
+    <div class="reader-content" id="readerBody"></div>
+  </div>
+
+  <input type="file" id="mangaFileInput" accept=".cbz,.cbr,.zip,image/*" multiple style="display:none">
+
+  <script src="/__webdeck/vendor/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

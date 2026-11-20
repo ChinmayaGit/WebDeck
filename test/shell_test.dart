@@ -73,7 +73,7 @@ void main() {
 
       nav.value = ShellNavigation.store;
       await tester.pump();
-      expect(store.entries.length, 27);
+      expect(store.entries.length, 40);
       expect(store.categories.take(4), ['PDF', 'Image', 'Video', 'Audio']);
       expect(find.text('WebDeck Store'), findsOneWidget);
       final scroller = find.byType(Scrollable).first;

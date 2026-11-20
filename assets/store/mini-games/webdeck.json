@@ -1,0 +1,12 @@
+{
+  "id": "mini-games",
+  "name": "Mini Games (Chess & Tic-Tac-Toe)",
+  "version": "1.0.0",
+  "description": "Play classic mini games offline: Full Chess with AI engine & 2-player mode, Tic-Tac-Toe with unbeatable AI, and 2048 sliding number puzzle.",
+  "category": "Games",
+  "icon": "chess",
+  "color": "#8B5CF6",
+  "permissions": [],
+  "essential": false,
+  "author": "WebDeck"
+}

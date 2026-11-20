@@ -109,6 +109,19 @@ flutter:
     - assets/store/nearby-share/
     - assets/store/messages/
     - assets/store/clipboard-sync/
+    - assets/store/movies/
+    - assets/store/games/
+    - assets/store/vedas/
+    - assets/store/cards-insurance/
+    - assets/store/compass/
+    - assets/store/radio/
+    - assets/store/mini-games/
+    - assets/store/manga/
+    - assets/store/camscanner/
+    - assets/store/bills-tracker/
+    - assets/store/notes/
+    - assets/store/bookings/
+    - assets/store/alpine-host/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

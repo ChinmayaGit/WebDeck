@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini Games Collection</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .game-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .game-section { display: none; }
+    .game-section.active { display: flex; flex-direction: column; align-items: center; }
+
+    /* Tic-Tac-Toe */
+    .ttt-board { display: grid; grid-template-columns: repeat(3, 90px); grid-template-rows: repeat(3, 90px); gap: 8px; margin-top: 16px; }
+    .ttt-cell { background: var(--wd-surface); border: 2px solid var(--wd-border); border-radius: 12px; font-size: 42px; font-weight: 800; cursor: pointer; display: grid; place-items: center; transition: background .15s ease; }
+    .ttt-cell:hover { background: var(--wd-surface-2); }
+    .ttt-cell.x { color: #388BFD; }
+    .ttt-cell.o { color: #EF4444; }
+
+    /* Chess */
+    .chess-container { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .chess-board { display: grid; grid-template-columns: repeat(8, 48px); grid-template-rows: repeat(8, 48px); border: 3px solid var(--wd-border); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.4); }
+    .sq { display: grid; place-items: center; font-size: 32px; cursor: pointer; user-select: none; }
+    .sq.light { background: #E2E8F0; color: #1E293B; }
+    .sq.dark { background: #64748B; color: #0F172A; }
+    .sq.selected { background: #FBBF24 !important; }
+    .sq.valid-move { position: relative; }
+    .sq.valid-move::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: rgba(56,139,253,.7); }
+
+    /* 2048 */
+    .grid-2048 { display: grid; grid-template-columns: repeat(4, 70px); grid-template-rows: repeat(4, 70px); gap: 8px; background: #BBADA0; padding: 10px; border-radius: 10px; }
+    .cell-2048 { background: rgba(238, 228, 218, 0.35); border-radius: 6px; display: grid; place-items: center; font-size: 24px; font-weight: 800; color: #776E65; user-select: none; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:880px;text-align:center">
+    <div class="wd-header" style="justify-content:center">
+      <div class="wd-icon" style="background:#8B5CF6;color:#fff">♟️</div>
+      <div>
+        <h1>Mini Games Collection</h1>
+        <div class="wd-sub">Chess · Tic-Tac-Toe · 2048</div>
+      </div>
+    </div>
+
+    <!-- Game Switcher -->
+    <div class="wd-tabs" style="justify-content:center;margin-bottom:18px">
+      <button class="wd-tab" data-game="chess" aria-selected="true">♟️ Chess</button>
+      <button class="wd-tab" data-game="ttt" aria-selected="false">❌ Tic-Tac-Toe</button>
+      <button class="wd-tab" data-game="2048" aria-selected="false">🔢 2048</button>
+    </div>
+
+    <!-- Chess Section -->
+    <div class="game-section active" id="secChess">
+      <div class="wd-row" style="gap:12px;margin-bottom:10px">
+        <span style="font-weight:700" id="chessTurnText">White's Turn</span>
+        <button class="wd-btn wd-btn-sm" id="btnFlipChess">Flip Board</button>
+        <button class="wd-btn wd-btn-sm" id="btnResetChess">New Game</button>
+        <select class="wd-input" id="chessMode" style="font-size:12px">
+          <option value="pve">Play vs Computer (AI)</option>
+          <option value="pvp">2-Player Pass & Play</option>
+        </select>
+      </div>
+      <div class="chess-board" id="chessBoard"></div>
+      <div class="wd-small wd-muted" style="margin-top:8px" id="chessStatus">Select a piece to view legal moves and play.</div>
+    </div>
+
+    <!-- Tic Tac Toe Section -->
+    <div class="game-section" id="secTtt">
+      <div class="wd-row" style="gap:12px;margin-bottom:10px">
+        <span style="font-weight:700" id="tttTurnText">Player X's Turn</span>
+        <button class="wd-btn wd-btn-sm" id="btnResetTtt">Reset</button>
+        <select class="wd-input" id="tttMode" style="font-size:12px">
+          <option value="ai-smart">Play vs Unbeatable AI</option>
+          <option value="ai-easy">Play vs Casual AI</option>
+          <option value="pvp">2 Players</option>
+        </select>
+      </div>
+      <div class="ttt-board" id="tttBoard"></div>
+      <div class="wd-small wd-muted" style="margin-top:10px" id="tttScore">Score — X: 0 | O: 0 | Ties: 0</div>
+    </div>
+
+    <!-- 2048 Section -->
+    <div class="game-section" id="sec2048">
+      <div class="wd-row" style="gap:14px;margin-bottom:10px">
+        <span style="font-weight:700">Score: <span id="score2048">0</span></span>
+        <span style="font-weight:700">Best: <span id="best2048">0</span></span>
+        <button class="wd-btn wd-btn-sm" id="btnReset2048">New Game</button>
+      </div>
+      <div class="grid-2048" id="board2048"></div>
+      <div class="wd-small wd-muted" style="margin-top:10px">Use Arrow Keys (↑, ↓, ←, →) or swipe to join the numbers!</div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

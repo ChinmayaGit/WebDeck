@@ -31,4 +31,5 @@ class ShellNavigation extends ValueNotifier<int> {
   static const store = 1;
   static const activity = 2;
   static const settings = 3;
+  static const feeds = 4;
 }

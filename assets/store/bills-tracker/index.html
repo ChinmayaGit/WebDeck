@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bills & Subscriptions Tracker</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .summary-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; padding: 18px 24px; margin-bottom: 18px; display: flex; gap: 24px; flex-wrap: wrap; }
+    .stat-box { flex: 1; min-width: 140px; }
+    .stat-label { font-size: 12px; color: var(--wd-muted); text-transform: uppercase; font-weight: 700; }
+    .stat-val { font-size: 28px; font-weight: 800; color: var(--wd-text); margin-top: 4px; }
+    .stat-val.green { color: #10B981; }
+    .stat-val.red { color: #EF4444; }
+    .bills-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+    .bill-row { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .bill-row:hover { border-color: var(--wd-primary); }
+    .bill-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--wd-surface-2); font-size: 22px; display: grid; place-items: center; flex: none; }
+    .status-badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+    .status-paid { background: rgba(16,185,129,.15); color: #10B981; }
+    .status-due { background: rgba(245,158,11,.15); color: #F59E0B; }
+    .status-overdue { background: rgba(239,68,68,.15); color: #EF4444; }
+    .offer-pill { font-size: 11px; background: rgba(56,139,253,.15); color: #388BFD; padding: 2px 7px; border-radius: 4px; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: grid; place-items: center; z-index: 100; padding: 16px; }
+    .modal[hidden] { display: none; }
+    .modal-box { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1100px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#16A34A;color:#fff">🧾</div>
+      <div>
+        <h1>Bills & Subscriptions Tracker</h1>
+        <div class="wd-sub">Utilities & Subscriptions · Due Date Reminders · Best Payment Offers & Monthly Budget</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnOpenAdd">+ Add Bill / Sub</button>
+      <button class="wd-btn" id="btnExportJson">Export JSON</button>
+    </div>
+
+    <!-- Monthly Overview Summary Banner -->
+    <div class="summary-card">
+      <div class="stat-box">
+        <div class="stat-label">Total Monthly Spend</div>
+        <div class="stat-val" id="totalMonthlyVal">$0 / ₹0</div>
+        <div class="wd-small wd-muted" id="totalYearlySub">Annual: $0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Upcoming Due This Month</div>
+        <div class="stat-val red" id="upcomingDueVal">$0 / ₹0</div>
+        <div class="wd-small wd-muted" id="upcomingCountSub">0 bills pending</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Paid This Month</div>
+        <div class="stat-val green" id="paidThisMonthVal">$0 / ₹0</div>
+        <div class="wd-small wd-muted" id="paidCountSub">0 completed</div>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="wd-row" style="margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <div class="wd-tabs">
+        <button class="wd-tab" data-filter="all" aria-selected="true">All (<span id="cntAll">0</span>)</button>
+        <button class="wd-tab" data-filter="due" aria-selected="false">Due Soon (<span id="cntDue">0</span>)</button>
+        <button class="wd-tab" data-filter="utilities" aria-selected="false">💡 Utilities</button>
+        <button class="wd-tab" data-filter="subscriptions" aria-selected="false">📺 Subscriptions</button>
+        <button class="wd-tab" data-filter="paid" aria-selected="false">Paid</button>
+      </div>
+      <div class="wd-spacer"></div>
+      <input type="text" id="searchInput" class="wd-input" style="max-width:240px" placeholder="Search bill or company…">
+    </div>
+
+    <!-- Bills List -->
+    <div class="bills-list" id="billsList"></div>
+  </div>
+
+  <!-- Add Bill Modal -->
+  <div class="modal" id="addModal" hidden>
+    <div class="modal-box">
+      <div class="wd-row" style="margin-bottom:12px">
+        <h3 style="margin:0">Add Bill or Subscription</h3>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-ghost wd-btn-sm" id="closeAddModal">✕</button>
+      </div>
+      <form id="addForm" style="display:flex;flex-direction:column;gap:10px">
+        <label>
+          <span class="wd-small">Name / Provider *</span>
+          <input type="text" class="wd-input wd-grow" id="bName" required placeholder="e.g. Electricity, Netflix, Jio Fiber, Gas">
+        </label>
+        <div class="wd-row" style="gap:10px">
+          <label style="flex:1">
+            <span class="wd-small">Category</span>
+            <select class="wd-input" id="bCategory">
+              <option value="utilities">Electricity / Power</option>
+              <option value="utilities">Internet / Wi-Fi</option>
+              <option value="utilities">Gas / Cylinder</option>
+              <option value="utilities">Mobile / Recharge</option>
+              <option value="utilities">Water / Utility</option>
+              <option value="subscriptions">Streaming (Netflix, Prime)</option>
+              <option value="subscriptions">Music (Spotify, Apple)</option>
+              <option value="subscriptions">Software / AI (ChatGPT, iCloud)</option>
+              <option value="other">Rent / Other</option>
+            </select>
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Amount *</span>
+            <input type="number" step="0.01" class="wd-input" id="bAmount" required placeholder="1499">
+          </label>
+        </div>
+        <div class="wd-row" style="gap:10px">
+          <label style="flex:1">
+            <span class="wd-small">Billing Cycle</span>
+            <select class="wd-input" id="bCycle">
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly / Annual</option>
+              <option value="quarterly">Quarterly</option>
+            </select>
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Due Day of Month (1 - 31)</span>
+            <input type="number" min="1" max="31" class="wd-input" id="bDueDay" required placeholder="15">
+          </label>
+        </div>
+        <label>
+          <span class="wd-small">Best Payment Offer / Tip</span>
+          <input type="text" class="wd-input" id="bOffer" placeholder="e.g. 5% cashback via Amazon Pay, or 25% Airtel Axis">
+        </label>
+        <div class="wd-row" style="margin-top:10px;gap:8px">
+          <button type="submit" class="wd-btn wd-btn-primary wd-grow">Save Bill</button>
+          <button type="button" class="wd-btn" id="btnCancelAdd">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

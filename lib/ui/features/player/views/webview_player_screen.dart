@@ -36,6 +36,7 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   bool _isLoading = true;
   bool _isWebViewSupported = true;
   bool _showControls = false;
+  Offset? _controlsOffset;
   String? _initError;
   String? _pageLoadError;
 
@@ -252,92 +253,135 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
                   ),
                 ),
 
-              // Floating Minimal Control Capsule (Hover on desktop, tap on mobile to reveal)
-              Positioned(
-                top: 12,
-                right: 16,
-                child: MouseRegion(
-                  onEnter: (_) => setState(() => _showControls = true),
-                  onExit: (_) => setState(() => _showControls = false),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _showControls = !_showControls),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+              // Floating Draggable Minimal Control Capsule
+              Builder(
+                builder: (context) {
+                  final size = MediaQuery.sizeOf(context);
+                  final paddingTop = MediaQuery.paddingOf(context).top;
+                  final defaultX = (size.width - (_showControls ? 230.0 : 48.0) - 16.0).clamp(8.0, size.width - 48.0);
+                  final defaultY = (paddingTop + 12.0).clamp(8.0, size.height - 48.0);
+                  final currentX = (_controlsOffset?.dx ?? defaultX).clamp(8.0, (size.width - 48.0).clamp(8.0, double.infinity));
+                  final currentY = (_controlsOffset?.dy ?? defaultY).clamp(paddingTop + 4.0, (size.height - 48.0).clamp(paddingTop + 4.0, double.infinity));
+
+                  return Positioned(
+                    left: currentX,
+                    top: currentY,
+                    child: GestureDetector(
+                      onPanUpdate: (details) {
+                        setState(() {
+                          _controlsOffset = Offset(
+                            currentX + details.delta.dx,
+                            currentY + details.delta.dy,
+                          );
+                        });
+                      },
+                      child: MouseRegion(
+                        onEnter: (_) => setState(() => _showControls = true),
+                        onExit: (_) => setState(() => _showControls = false),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: _showControls ? 8.0 : 4.0,
+                            vertical: 4.0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: WebDeckTheme.surface.withValues(
+                              alpha: _showControls ? 0.95 : 0.75,
+                            ),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: WebDeckTheme.border.withValues(
+                                alpha: _showControls ? 0.9 : 0.5,
+                              ),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Move / drag handle icon
+                              GestureDetector(
+                                onLongPress: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Drag to move this button anywhere on screen'),
+                                      duration: Duration(seconds: 1),
+                                    ),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    size: 16,
+                                    color: WebDeckTheme.textSecondary.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ),
+                              if (_showControls) ...[
+                                Text(
+                                  widget.app.name,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: WebDeckTheme.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                if (_isWebViewSupported && _controller != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.refresh, size: 16),
+                                    tooltip: 'Reload',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => _controller?.reload(),
+                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.open_in_browser, size: 16),
+                                  tooltip: 'Open in System Browser',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: _openInExternalBrowser,
+                                ),
+                                if (widget.app.backendRequirement?.hasRequirements == true)
+                                  IconButton(
+                                    icon: const Icon(Icons.dns_rounded, size: 16),
+                                    tooltip: 'Backend Console (DB / Test API)',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: _openBackendConsole,
+                                  ),
+                                const SizedBox(width: 2),
+                              ],
+                              GestureDetector(
+                                onLongPress: () {
+                                  // Long-press also expands controls / signals drag
+                                  setState(() => _showControls = !_showControls);
+                                },
+                                child: IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  tooltip: 'Exit App (or Drag Move)',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => Navigator.of(context).pop(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: WebDeckTheme.surface.withValues(
-                          alpha: _showControls ? 0.95 : 0.6,
-                        ),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: WebDeckTheme.border.withValues(
-                            alpha: _showControls ? 0.9 : 0.4,
-                          ),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                      if (_showControls) ...[
-                        Text(
-                          widget.app.name,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: WebDeckTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (_isWebViewSupported && _controller != null)
-                          IconButton(
-                            icon: const Icon(Icons.refresh, size: 16),
-                            tooltip: 'Reload',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => _controller?.reload(),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.open_in_browser, size: 16),
-                          tooltip: 'Open in System Browser',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: _openInExternalBrowser,
-                        ),
-                        if (widget.app.backendRequirement?.hasRequirements == true)
-                          IconButton(
-                            icon: const Icon(Icons.dns_rounded, size: 16),
-                            tooltip: 'Backend Console (DB / Test API)',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: _openBackendConsole,
-                          ),
-                        const SizedBox(width: 4),
-                      ],
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        tooltip: 'Exit App',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
-    ),
-  ),
-);
-}
+    );
+  }
 
   void _retryLoading() {
     setState(() {

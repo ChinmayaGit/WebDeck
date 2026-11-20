@@ -1,0 +1,14 @@
+{
+  "id": "radio",
+  "name": "Global Radio & Lofi",
+  "version": "1.0.0",
+  "description": "Stream live world radio stations across Lofi, Classical, Jazz, News, Ambient and International music with real-time audio visualizer and sleep timer.",
+  "category": "Audio",
+  "icon": "radio",
+  "color": "#14B8A6",
+  "permissions": [
+    "net"
+  ],
+  "essential": false,
+  "author": "WebDeck"
+}

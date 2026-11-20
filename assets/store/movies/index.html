@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Movie Tracker & Recommender</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 14px; }
+    .card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s ease; }
+    .card:hover { transform: translateY(-2px); border-color: var(--wd-primary); }
+    .poster-wrap { position: relative; width: 100%; aspect-ratio: 2/3; background: var(--wd-surface-2); display: flex; align-items: center; justify-content: center; font-size: 38px; }
+    .poster { width: 100%; height: 100%; object-fit: cover; }
+    .rating-badge { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.75); color: #fbbf24; padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 700; backdrop-filter: blur(4px); }
+    .card-body { padding: 12px; display: flex; flex-direction: column; flex: 1; gap: 6px; }
+    .title { font-weight: 700; font-size: 14px; line-height: 1.3; }
+    .meta { font-size: 12px; color: var(--wd-muted); }
+    .providers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .provider { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; text-decoration: none; }
+    .p-netflix { background: #E50914; color: #fff; }
+    .p-prime { background: #00A8E1; color: #fff; }
+    .p-disney { background: #113CCF; color: #fff; }
+    .p-apple { background: #444; color: #fff; }
+    .p-free { background: #10B981; color: #fff; }
+    .actions { margin-top: auto; display: flex; gap: 6px; padding-top: 8px; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: grid; place-items: center; z-index: 100; padding: 16px; }
+    .modal[hidden] { display: none; }
+    .modal-box { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; max-width: 580px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px; }
+    .trailer-box { max-width: 760px; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; }
+    .trailer-box iframe { width: 100%; height: 100%; border: none; }
+    .status-select { font-size: 11px; padding: 3px 6px; border-radius: 6px; background: var(--wd-surface-2); color: inherit; border: 1px solid var(--wd-border); }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1160px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#E11D48;color:#fff">🎬</div>
+      <div>
+        <h1>Movie Tracker & Recommender</h1>
+        <div class="wd-sub">Track Watched, Half Done & Watchlist · Streaming Providers · Trailers · Add by SS</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnOpenAdd">+ Add Movie</button>
+      <button class="wd-btn" id="btnImportSS">📷 Add by SS</button>
+      <button class="wd-btn" id="btnBackup">Export JSON</button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="wd-row" style="margin-bottom:12px;gap:8px;flex-wrap:wrap">
+      <div class="wd-tabs">
+        <button class="wd-tab" data-filter="all" aria-selected="true">All (<span id="cntAll">0</span>)</button>
+        <button class="wd-tab" data-filter="watching" aria-selected="false">Watching (<span id="cntWatching">0</span>)</button>
+        <button class="wd-tab" data-filter="halfdone" aria-selected="false">Half Done (<span id="cntHalf">0</span>)</button>
+        <button class="wd-tab" data-filter="watched" aria-selected="false">Watched (<span id="cntWatched">0</span>)</button>
+        <button class="wd-tab" data-filter="watchlist" aria-selected="false">Watchlist (<span id="cntWatchlist">0</span>)</button>
+        <button class="wd-tab" data-filter="recs" aria-selected="false">✨ Recommended</button>
+      </div>
+      <div class="wd-spacer"></div>
+      <input type="text" id="searchInput" class="wd-input" style="max-width:240px" placeholder="Search title or genre…">
+    </div>
+
+    <!-- Recommendations Genre Selector (when recs tab active) -->
+    <div id="recFilters" class="wd-row" style="margin-bottom:12px;gap:6px;display:none;flex-wrap:wrap">
+      <span class="wd-small wd-muted">Mood:</span>
+      <button class="wd-btn wd-btn-sm" data-genre="all">All</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Sci-Fi">Sci-Fi</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Thriller">Thriller</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Action">Action</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Drama">Drama</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Comedy">Comedy</button>
+      <button class="wd-btn wd-btn-sm" data-genre="Animation">Animation</button>
+    </div>
+
+    <!-- Movies Grid -->
+    <div class="grid" id="movieGrid"></div>
+  </div>
+
+  <!-- Add Movie Modal -->
+  <div class="modal" id="addModal" hidden>
+    <div class="modal-box">
+      <div class="wd-row" style="margin-bottom:14px">
+        <h3 style="margin:0">Add Movie</h3>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-ghost wd-btn-sm" id="closeAddModal">✕</button>
+      </div>
+      <form id="addForm" style="display:flex;flex-direction:column;gap:10px">
+        <label>
+          <span class="wd-small">Movie Title *</span>
+          <input type="text" class="wd-input wd-grow" id="mTitle" required placeholder="e.g. Inception, Interstellar, Dune">
+        </label>
+        <div class="wd-row" style="gap:10px">
+          <label style="flex:1">
+            <span class="wd-small">Year</span>
+            <input type="number" class="wd-input" id="mYear" placeholder="2024">
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Rating (1-10)</span>
+            <input type="number" step="0.1" class="wd-input" id="mRating" placeholder="8.8">
+          </label>
+          <label style="flex:1">
+            <span class="wd-small">Status</span>
+            <select class="wd-input" id="mStatus">
+              <option value="watchlist">Watchlist</option>
+              <option value="watching">Watching</option>
+              <option value="halfdone">Half Done</option>
+              <option value="watched">Watched</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span class="wd-small">Genre(s)</span>
+          <input type="text" class="wd-input" id="mGenre" placeholder="Sci-Fi, Action, Thriller">
+        </label>
+        <label>
+          <span class="wd-small">Streaming Platform(s)</span>
+          <input type="text" class="wd-input" id="mProviders" placeholder="Netflix, Prime Video, Disney+, Apple TV">
+        </label>
+        <label>
+          <span class="wd-small">Poster Image URL</span>
+          <input type="url" class="wd-input" id="mPoster" placeholder="https://… or leave blank for auto">
+        </label>
+        <label>
+          <span class="wd-small">YouTube Trailer Embed / URL</span>
+          <input type="text" class="wd-input" id="mTrailer" placeholder="e.g. https://www.youtube.com/watch?v=YoHD9XEInc0">
+        </label>
+        <label>
+          <span class="wd-small">Personal Notes / Thoughts</span>
+          <textarea class="wd-input" id="mNotes" rows="2" placeholder="Great climax, rewatch with friends"></textarea>
+        </label>
+        <div class="wd-row" style="margin-top:10px;gap:8px">
+          <button type="submit" class="wd-btn wd-btn-primary wd-grow">Save Movie</button>
+          <button type="button" class="wd-btn" id="btnCancelAdd">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Trailer Player Modal -->
+  <div class="modal" id="trailerModal" hidden>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;max-width:760px;width:100%">
+      <button class="wd-btn wd-btn-ghost" id="closeTrailerModal" style="color:#fff;margin-bottom:8px">✕ Close Trailer</button>
+      <div class="trailer-box" id="trailerContainer"></div>
+    </div>
+  </div>
+
+  <input type="file" id="ssFileInput" accept="image/*" style="display:none">
+  <input type="file" id="jsonFileInput" accept=".json" style="display:none">
+
+  <script src="app.js"></script>
+</body>
+</html>

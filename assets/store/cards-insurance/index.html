@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cards & Insurance Advisor</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 14px; }
+    .card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .card:hover { border-color: var(--wd-primary); }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; display: inline-block; }
+    .b-green { background: rgba(16,185,129,.15); color: #10B981; border: 1px solid rgba(16,185,129,.3); }
+    .b-blue { background: rgba(56,139,253,.15); color: #388BFD; border: 1px solid rgba(56,139,253,.3); }
+    .b-purple { background: rgba(168,85,247,.15); color: #A855F7; border: 1px solid rgba(168,85,247,.3); }
+    .benefit-row { display: flex; gap: 8px; font-size: 13px; align-items: baseline; }
+    .compare-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+    .compare-table th, .compare-table td { border: 1px solid var(--wd-border); padding: 10px 12px; text-align: left; }
+    .compare-table th { background: var(--wd-surface-2); }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: grid; place-items: center; z-index: 100; padding: 16px; }
+    .modal[hidden] { display: none; }
+    .modal-box { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; max-width: 800px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 22px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:1160px">
+    <!-- Header -->
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#0284C7;color:#fff">💳</div>
+      <div>
+        <h1>Cards & Insurance Advisor</h1>
+        <div class="wd-sub">Country-Specific Recommendations · Side-by-Side Comparison · Benefits & CSR Analysis</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-primary" id="btnAdvisorQuiz">🎯 Find Best For Me</button>
+      <button class="wd-btn" id="btnOpenCompare">⚖️ Compare Selected (<span id="compareCount">0</span>)</button>
+    </div>
+
+    <!-- Country Selector & Main Mode Tabs -->
+    <div class="wd-row" style="margin-bottom:14px;gap:12px;flex-wrap:wrap">
+      <label class="wd-row" style="gap:6px">
+        <span style="font-weight:700">Country:</span>
+        <select id="countrySelect" class="wd-input" style="font-weight:600;min-width:140px">
+          <option value="US">🇺🇸 United States</option>
+          <option value="IN" selected>🇮🇳 India</option>
+          <option value="UK">🇬🇧 United Kingdom</option>
+          <option value="CA">🇨🇦 Canada</option>
+          <option value="AU">🇦🇺 Australia</option>
+          <option value="AE">🇦🇪 United Arab Emirates</option>
+          <option value="SG">🇸🇬 Singapore</option>
+          <option value="DE">🇩🇪 Germany / EU</option>
+        </select>
+      </label>
+
+      <div class="wd-tabs">
+        <button class="wd-tab" data-tab="cards" aria-selected="true">Credit Cards</button>
+        <button class="wd-tab" data-tab="insurance" aria-selected="false">Insurance</button>
+      </div>
+
+      <div class="wd-spacer"></div>
+      <input type="text" id="searchInput" class="wd-input" style="max-width:240px" placeholder="Filter by bank or feature…">
+    </div>
+
+    <!-- Category Filter Pills -->
+    <div class="wd-row" id="subFilters" style="margin-bottom:14px;gap:6px;flex-wrap:wrap"></div>
+
+    <!-- Items Grid -->
+    <div class="grid" id="itemsGrid"></div>
+  </div>
+
+  <!-- Comparison Modal -->
+  <div class="modal" id="compareModal" hidden>
+    <div class="modal-box">
+      <div class="wd-row" style="margin-bottom:12px">
+        <h3 style="margin:0">Side-by-Side Comparison</h3>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-ghost wd-btn-sm" id="closeCompareModal">✕</button>
+      </div>
+      <div id="compareTableContainer" style="overflow-x:auto"></div>
+    </div>
+  </div>
+
+  <!-- Advisor Quiz Modal -->
+  <div class="modal" id="quizModal" hidden>
+    <div class="modal-box" style="max-width:540px">
+      <div class="wd-row" style="margin-bottom:12px">
+        <h3 style="margin:0">Personalized Recommendation Wizard</h3>
+        <div class="wd-spacer"></div>
+        <button class="wd-btn wd-btn-ghost wd-btn-sm" id="closeQuizModal">✕</button>
+      </div>
+      <form id="quizForm" style="display:flex;flex-direction:column;gap:12px">
+        <label>
+          <span class="wd-small">What are you looking for?</span>
+          <select class="wd-input" id="quizTarget">
+            <option value="cards">Best Credit Card</option>
+            <option value="insurance">Best Health / Term Insurance</option>
+          </select>
+        </label>
+        <label>
+          <span class="wd-small">Primary Objective / Spending Category</span>
+          <select class="wd-input" id="quizObjective">
+            <option value="cashback">Maximum Cashback on Daily Shopping & Utilities</option>
+            <option value="travel">Free Airport Lounges & Air Miles</option>
+            <option value="nofee">Lifetime Free / Zero Annual Fee</option>
+            <option value="forex">Zero Markup Forex on Foreign Trips & Online</option>
+            <option value="health">High Health Coverage & 100% Cashless Hospitals</option>
+            <option value="term">Large Term Life Sum Assured (High CSR)</option>
+          </select>
+        </label>
+        <label>
+          <span class="wd-small">Estimated Monthly Spend or Budget</span>
+          <select class="wd-input" id="quizBudget">
+            <option value="low">Low to Moderate (Under $500 / ₹25,000 / £400)</option>
+            <option value="medium">Medium ($500 - $2,000 / ₹25k - ₹1 Lakh / £400 - £1.5k)</option>
+            <option value="high">High ($2,000+ / ₹1 Lakh+ / £1.5k+)</option>
+          </select>
+        </label>
+        <button type="submit" class="wd-btn wd-btn-primary" style="margin-top:6px">See Personalized Top Recommendation</button>
+      </form>
+      <div id="quizResult" style="margin-top:14px" hidden></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

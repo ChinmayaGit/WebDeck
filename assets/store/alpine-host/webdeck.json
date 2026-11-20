@@ -1,0 +1,15 @@
+{
+  "id": "alpine-host",
+  "name": "Alpine Linux Runner & Host",
+  "version": "1.0.0",
+  "description": "Run Alpine Linux to host live apps, microservices, and scripts. Run apk packages, execute Python/Node/Go servers, forward ports, and connect to online cloud instances.",
+  "category": "Developer",
+  "icon": "cloud",
+  "color": "#0284C7",
+  "permissions": [
+    "net",
+    "files"
+  ],
+  "essential": false,
+  "author": "WebDeck"
+}

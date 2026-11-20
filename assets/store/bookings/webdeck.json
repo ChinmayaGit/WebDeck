@@ -1,0 +1,12 @@
+{
+  "id": "bookings",
+  "name": "Bookings & Ticket Tracker",
+  "version": "1.0.0",
+  "description": "Track flight, train, movie tickets, hotel bookings and doctor appointments. Displays real-time QR/barcodes for quick gate scanning, countdown timers, and calendar export.",
+  "category": "Documents",
+  "icon": "booking",
+  "color": "#6366F1",
+  "permissions": [],
+  "essential": false,
+  "author": "WebDeck"
+}

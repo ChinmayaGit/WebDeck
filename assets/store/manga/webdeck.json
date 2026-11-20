@@ -1,0 +1,14 @@
+{
+  "id": "manga",
+  "name": "Manga & Comic Reader",
+  "version": "1.0.0",
+  "description": "Read Manga, Manhwa and Comics offline. Supports CBZ, CBR, ZIP and image directories with Webtoon vertical strip scroll, Single Page, and Double Page Right-to-Left manga modes.",
+  "category": "Books",
+  "icon": "manga",
+  "color": "#F43F5E",
+  "permissions": [
+    "files"
+  ],
+  "essential": false,
+  "author": "WebDeck"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "bills-tracker",
+  "name": "Bills & Subscriptions Tracker",
+  "version": "1.0.0",
+  "description": "Track electricity, gas, wifi, mobile bills and digital subscriptions (Netflix, Prime, Spotify). Due date countdowns, monthly spending breakdown, and best cashback payment offers.",
+  "category": "Documents",
+  "icon": "bill",
+  "color": "#16A34A",
+  "permissions": [],
+  "essential": true,
+  "author": "WebDeck"
+}

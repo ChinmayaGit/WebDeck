@@ -1,0 +1,12 @@
+{
+  "id": "cards-insurance",
+  "name": "Cards & Insurance Advisor",
+  "version": "1.0.0",
+  "description": "Find and compare the best credit cards and insurance policies by country (USA, India, UK, Canada, Australia, UAE, etc.). Filter by cashback, airport lounge access, zero forex, health coverage, claim ratios, and get personalized recommendations.",
+  "category": "Documents",
+  "icon": "card",
+  "color": "#0284C7",
+  "permissions": [],
+  "essential": false,
+  "author": "WebDeck"
+}

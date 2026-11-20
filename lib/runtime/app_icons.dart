@@ -49,6 +49,16 @@ class AppGlyphs {
     'chat': Icons.chat_bubble_rounded,
     'clipboard': Icons.content_paste_rounded,
     'call': Icons.call_rounded,
+    'compass': Icons.explore_rounded,
+    'radio': Icons.radio_rounded,
+    'chess': Icons.grid_4x4_rounded,
+    'scanner': Icons.document_scanner_rounded,
+    'bill': Icons.receipt_rounded,
+    'card': Icons.credit_card_rounded,
+    'manga': Icons.auto_stories_rounded,
+    'veda': Icons.self_improvement_rounded,
+    'cloud': Icons.cloud_queue_rounded,
+    'booking': Icons.airplane_ticket_rounded,
   };
 
   static IconData of(String name) => glyphs[name] ?? Icons.apps_rounded;

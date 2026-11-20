@@ -1,0 +1,14 @@
+{
+  "id": "notes",
+  "name": "Markdown Notes & Checklists",
+  "version": "1.0.0",
+  "description": "Fast, distraction-free markdown notes, checklists, color tags, instant search, pin notes, and export to .md / .txt files.",
+  "category": "Documents",
+  "icon": "note",
+  "color": "#EAB308",
+  "permissions": [
+    "files"
+  ],
+  "essential": true,
+  "author": "WebDeck"
+}

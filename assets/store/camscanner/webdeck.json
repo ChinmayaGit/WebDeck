@@ -1,0 +1,12 @@
+{
+  "id": "camscanner",
+  "name": "CamScanner & PDF Maker",
+  "version": "1.0.0",
+  "description": "Document scanner with custom filters (Magic Color, B&W, Grayscale), page rearranging, rotation, and high-quality multi-page PDF generation.",
+  "category": "Documents",
+  "icon": "scanner",
+  "color": "#0284C7",
+  "permissions": ["files"],
+  "essential": true,
+  "author": "WebDeck"
+}

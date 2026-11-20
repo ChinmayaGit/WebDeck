@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../runtime/notification_service.dart';
+import '../../../runtime/settings_service.dart';
 import '../../../runtime/tools_service.dart';
 import '../../core/theme.dart';
 import '../activity/activity_screen.dart';
 import '../catalog/views/home_screen.dart';
+import '../feeds/feeds_screen.dart';
 import '../settings/settings_screen.dart';
 import '../store/store_screen.dart';
 import 'app_launcher.dart';
@@ -49,6 +51,7 @@ class _ShellScreenState extends State<ShellScreen> {
   Widget build(BuildContext context) {
     final unread = context.select<NotificationService, int>((n) => n.unreadCount);
     final running = context.select<ToolsService, int>((t) => t.runningTaskCount);
+    final showFeeds = context.select<SettingsService, bool>((s) => s.showFeeds);
     final activityBadge = unread + running;
 
     Widget activityIcon(IconData icon) => activityBadge > 0
@@ -56,16 +59,27 @@ class _ShellScreenState extends State<ShellScreen> {
         : Icon(icon);
 
     final destinations = [
-      (const Icon(Icons.apps_outlined), const Icon(Icons.apps), 'Apps'),
-      (const Icon(Icons.storefront_outlined), const Icon(Icons.storefront), 'Store'),
-      (activityIcon(Icons.notifications_none), activityIcon(Icons.notifications), 'Activity'),
-      (const Icon(Icons.settings_outlined), const Icon(Icons.settings), 'Settings'),
+      (const Icon(Icons.apps_outlined), const Icon(Icons.apps), 'Apps', ShellNavigation.apps),
+      (const Icon(Icons.storefront_outlined), const Icon(Icons.storefront), 'Store', ShellNavigation.store),
+      if (showFeeds)
+        (const Icon(Icons.school_outlined), const Icon(Icons.school), 'Feeds', ShellNavigation.feeds),
+      (activityIcon(Icons.notifications_none), activityIcon(Icons.notifications), 'Activity', ShellNavigation.activity),
+      (const Icon(Icons.settings_outlined), const Icon(Icons.settings), 'Settings', ShellNavigation.settings),
     ];
 
     final body = IndexedStack(
-      index: _nav.value,
-      children: const [HomeScreen(), StoreScreen(), ActivityScreen(), SettingsScreen()],
+      index: _nav.value.clamp(0, 4),
+      children: const [
+        HomeScreen(),
+        StoreScreen(),
+        ActivityScreen(),
+        SettingsScreen(),
+        FeedsScreen(),
+      ],
     );
+
+    final selectedIndex = destinations.indexWhere((d) => d.$4 == _nav.value);
+    final activeIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
     final wide = MediaQuery.sizeOf(context).width >= 720;
     if (wide) {
@@ -74,8 +88,8 @@ class _ShellScreenState extends State<ShellScreen> {
           children: [
             NavigationRail(
               backgroundColor: WebDeckTheme.surface,
-              selectedIndex: _nav.value,
-              onDestinationSelected: (i) => _nav.value = i,
+              selectedIndex: activeIndex,
+              onDestinationSelected: (i) => _nav.value = destinations[i].$4,
               labelType: NavigationRailLabelType.all,
               leading: Padding(
                 padding: const EdgeInsets.only(top: 8, bottom: 16),
@@ -103,8 +117,8 @@ class _ShellScreenState extends State<ShellScreen> {
     return Scaffold(
       body: body,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _nav.value,
-        onDestinationSelected: (i) => _nav.value = i,
+        selectedIndex: activeIndex,
+        onDestinationSelected: (i) => _nav.value = destinations[i].$4,
         destinations: [
           for (final d in destinations) NavigationDestination(icon: d.$1, selectedIcon: d.$2, label: d.$3),
         ],
