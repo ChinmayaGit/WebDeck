@@ -6,55 +6,557 @@
   <title>Voice & Video Calls</title>
   <link rel="stylesheet" href="/__webdeck/ui.css">
   <style>
-    .call-stage { position: relative; width: 100%; height: 440px; background: #000; border-radius: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
-    .remote-video { width: 100%; height: 100%; object-fit: cover; }
-    .local-pip { position: absolute; bottom: 16px; right: 16px; width: 140px; aspect-ratio: 16/9; background: #222; border: 2px solid rgba(255,255,255,.2); border-radius: 8px; overflow: hidden; }
-    .local-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-    .call-controls { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; background: rgba(0,0,0,.65); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 30px; border: 1px solid rgba(255,255,255,.15); }
-    .call-btn { width: 44px; height: 44px; border-radius: 50%; border: none; font-size: 18px; cursor: pointer; display: grid; place-items: center; }
+    /* Profile banner */
+    .profile-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--wd-surface);
+      border: 1px solid var(--wd-border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .profile-pill:hover {
+      border-color: #388BFD;
+      background: rgba(56,139,253,.08);
+    }
+    .transport-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .transport-chip {
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--wd-border);
+      background: var(--wd-surface);
+      color: var(--wd-muted);
+      transition: all .15s;
+    }
+    .transport-chip.active {
+      background: rgba(22,163,74,.15);
+      border-color: #16A34A;
+      color: #10B981;
+    }
+
+    /* Tabs */
+    .call-tabs {
+      display: flex;
+      gap: 12px;
+      border-bottom: 1px solid var(--wd-border);
+      margin-bottom: 18px;
+    }
+    .call-tab {
+      padding: 8px 16px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      color: var(--wd-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .call-tab.active {
+      color: var(--wd-primary, #388BFD);
+      border-bottom-color: var(--wd-primary, #388BFD);
+    }
+
+    /* Dialpad layout */
+    .dialpad-container {
+      max-width: 380px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .dial-display {
+      background: var(--wd-surface);
+      border: 1px solid var(--wd-border);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .dial-number {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--wd-fg);
+      min-height: 34px;
+      outline: none;
+      word-break: break-all;
+    }
+    .dial-backspace {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: var(--wd-muted);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .dial-backspace:hover {
+      background: rgba(255,255,255,.1);
+      color: var(--wd-fg);
+    }
+    .dial-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .dial-key {
+      background: var(--wd-surface);
+      border: 1px solid var(--wd-border);
+      border-radius: 50%;
+      width: 74px;
+      height: 74px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all .1s;
+      user-select: none;
+    }
+    .dial-key:active {
+      background: rgba(56,139,253,.2);
+      transform: scale(.95);
+    }
+    .dial-key-digit {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .dial-key-letters {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--wd-muted);
+      letter-spacing: 1.5px;
+      margin-top: 3px;
+    }
+    .dial-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+    .btn-dial-voice {
+      background: #16A34A;
+      color: #fff;
+      border: none;
+      border-radius: 28px;
+      padding: 12px 28px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(22,163,74,.4);
+      transition: transform .1s;
+    }
+    .btn-dial-video {
+      background: #8B5CF6;
+      color: #fff;
+      border: none;
+      border-radius: 28px;
+      padding: 12px 28px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(139,92,246,.4);
+      transition: transform .1s;
+    }
+    .btn-dial-voice:active, .btn-dial-video:active {
+      transform: scale(.96);
+    }
+
+    /* Active Call Stage */
+    .call-stage {
+      position: relative;
+      width: 100%;
+      height: 480px;
+      background: #090D16;
+      border-radius: 18px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 36px rgba(0,0,0,.5);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .remote-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .audio-visualizer-canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .local-pip {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 150px;
+      aspect-ratio: 16/9;
+      background: #1e293b;
+      border: 2px solid rgba(255,255,255,.3);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 6px 18px rgba(0,0,0,.4);
+      cursor: grab;
+    }
+    .local-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .call-hud {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      background: rgba(0,0,0,.65);
+      backdrop-filter: blur(10px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      color: #94A3B8;
+      border: 1px solid rgba(255,255,255,.1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .call-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 14px;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(12px);
+      padding: 10px 20px;
+      border-radius: 36px;
+      border: 1px solid rgba(255,255,255,.15);
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    }
+    .call-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all .15s;
+    }
     .btn-hangup { background: #EF4444; color: #fff; }
-    .btn-toggle { background: rgba(255,255,255,.2); color: #fff; }
-    .btn-toggle.active { background: #388BFD; }
-    .peer-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
-    .peer-card { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+    .btn-hangup:hover { background: #DC2626; }
+    .btn-toggle { background: rgba(255,255,255,.15); color: #fff; }
+    .btn-toggle:hover { background: rgba(255,255,255,.25); }
+    .btn-toggle.active { background: #EF4444; }
+
+    /* Directory items */
+    .contact-card {
+      background: var(--wd-surface);
+      border: 1px solid var(--wd-border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .contact-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10B981, #3B82F6);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    /* Modal */
+    .call-modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,.75);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .call-modal {
+      background: var(--wd-bg, #0F172A);
+      border: 1px solid var(--wd-border);
+      border-radius: 18px;
+      max-width: 460px;
+      width: 100%;
+      padding: 26px;
+      box-shadow: 0 16px 40px rgba(0,0,0,.6);
+      text-align: left;
+    }
+
+    /* Incoming Call Banner */
+    .incoming-pulse {
+      animation: pulse-ring 1.6s infinite ease-out;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(.95); box-shadow: 0 0 0 0 rgba(16,185,129,.7); }
+      70% { transform: scale(1.05); box-shadow: 0 0 0 24px rgba(16,185,129,0); }
+      100% { transform: scale(.95); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
   </style>
 </head>
 <body>
   <div class="wd-app" style="max-width:960px">
+    
+    <!-- Top Bar -->
     <div class="wd-header">
       <div class="wd-icon" style="background:#16A34A;color:#fff">📞</div>
       <div>
-        <h1>Voice & Video Calls</h1>
-        <div class="wd-sub">Device Link LAN P2P Audio/Video Calling · Encrypted Direct Streams</div>
+        <h1 style="display:flex;align-items:center;gap:10px">
+          Voice & Video Calls
+          <span class="wd-badge" id="callerBadge" style="background:rgba(22,163,74,.2);color:#10B981;font-weight:700">P2P Ready</span>
+        </h1>
+        <div class="wd-sub">Multi-Transport P2P: Internet · Local Wi-Fi · Bluetooth · Radiowave Mesh</div>
       </div>
       <div class="wd-spacer"></div>
-      <span class="wd-small" id="linkStatusText" style="color:#10B981;font-weight:700">● Device Link Ready</span>
-    </div>
 
-    <!-- Active Call Screen -->
-    <div class="call-stage" id="callStage">
-      <video class="remote-video" id="remoteVideo" autoplay playsinline></video>
-      <div id="callOverlayText" style="position:absolute;color:#fff;text-align:center">
-        <div style="font-size:36px;margin-bottom:8px">📱</div>
-        <div style="font-size:18px;font-weight:700" id="callWithText">Ready to Call</div>
-        <div class="wd-small" style="opacity:.8" id="callDuration">Select a paired device below to start video/audio call</div>
-      </div>
-
-      <div class="local-pip" id="localPip" hidden>
-        <video class="local-video" id="localVideo" autoplay playsinline muted></video>
-      </div>
-
-      <div class="call-controls" id="callControls" hidden>
-        <button class="call-btn btn-toggle" id="btnToggleMic" title="Mute/Unmute Mic">🎤</button>
-        <button class="call-btn btn-toggle" id="btnToggleCam" title="Toggle Camera">📹</button>
-        <button class="call-btn btn-hangup" id="btnEndCall" title="End Call">📞</button>
+      <!-- Caller Profile Pill -->
+      <div class="profile-pill" id="profilePill" title="Click to edit your Caller ID or generate a new number">
+        <span style="font-size:16px">👤</span>
+        <div>
+          <div style="font-weight:700;line-height:1.2" id="pillName">My Device</div>
+          <div style="font-size:11px;color:var(--wd-muted)" id="pillNumber">Setting up…</div>
+        </div>
+        <span style="font-size:13px;opacity:.6">✏️</span>
       </div>
     </div>
 
-    <!-- Paired Peer Devices -->
-    <div style="margin-top:20px">
-      <span style="font-weight:700;font-size:15px">Paired Devices Available for Calling</span>
-      <div class="peer-list" id="peersList"></div>
+    <!-- Transport Mode Selector -->
+    <div class="transport-bar">
+      <span style="font-size:12px;font-weight:600;display:flex;align-items:center;margin-right:6px">Transport:</span>
+      <div class="transport-chip active" data-transport="auto">⚡ Auto-Mesh (Optimal)</div>
+      <div class="transport-chip" data-transport="internet">🌐 Internet (WebRTC P2P)</div>
+      <div class="transport-chip" data-transport="wifi">📶 Local Wi-Fi (Device Link)</div>
+      <div class="transport-chip" data-transport="bluetooth">ᛒ Bluetooth (BLE Direct)</div>
+      <div class="transport-chip" data-transport="radiowave">📡 Radiowave (RF Mesh)</div>
+      <div class="wd-spacer"></div>
+      <button class="wd-btn wd-btn-sm" id="btnSimulateIncoming" title="Simulate an incoming call to test ringtone and answering">🧪 Test Call Me</button>
+    </div>
+
+    <!-- Active Call Screen (Visible during active call) -->
+    <div id="callStageView" hidden style="margin-bottom:24px">
+      <div class="call-stage" id="callStage">
+        <canvas class="audio-visualizer-canvas" id="audioVisualizer"></canvas>
+        <video class="remote-video" id="remoteVideo" autoplay playsinline></video>
+        
+        <!-- Live HUD Status -->
+        <div class="call-hud" id="callHud">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10B981"></span>
+          <span id="callHudTransport">Local Wi-Fi P2P</span>
+          <span>·</span>
+          <span id="callHudStats">18ms · 1.4 Mbps · Opus/VP9</span>
+        </div>
+
+        <!-- Center Overlay Text -->
+        <div id="callOverlayText" style="position:absolute;color:#fff;text-align:center;z-index:2">
+          <div id="callAvatarIcon" style="font-size:52px;margin-bottom:12px">👤</div>
+          <div style="font-size:24px;font-weight:700" id="callWithText">Connecting…</div>
+          <div style="font-size:14px;color:#94A3B8;margin-top:4px" id="callWithNumber">+1 (555) 000-0000</div>
+          <div style="font-size:16px;font-weight:600;margin-top:10px;color:#10B981" id="callDuration">00:00</div>
+        </div>
+
+        <!-- Local Camera PIP -->
+        <div class="local-pip" id="localPip" hidden>
+          <video class="local-video" id="localVideo" autoplay playsinline muted></video>
+        </div>
+
+        <!-- Floating Controls -->
+        <div class="call-controls" id="callControls">
+          <button class="call-btn btn-toggle" id="btnToggleMic" title="Mute/Unmute Mic">🎤</button>
+          <button class="call-btn btn-toggle" id="btnToggleCam" title="Toggle Camera">📹</button>
+          <button class="call-btn btn-toggle" id="btnToggleSpeaker" title="Switch Output / Speaker">🔊</button>
+          <button class="call-btn btn-hangup" id="btnEndCall" title="End Call">📞</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="call-tabs">
+      <div class="call-tab active" data-tab="dialpad">🔢 Dialpad</div>
+      <div class="call-tab" data-tab="directory">👥 Network Directory (<span id="contactsCount">0</span>)</div>
+      <div class="call-tab" data-tab="recents">🕒 Recent Calls</div>
+      <div class="call-tab" data-tab="settings">⚙️ Network & Audio</div>
+    </div>
+
+    <!-- Tab 1: Dialpad -->
+    <div id="tabContentDialpad">
+      <div class="dialpad-container">
+        <div class="dial-display">
+          <div class="dial-number" id="dialNumberInput" contenteditable="false" placeholder="Enter number or pick below"></div>
+          <button class="dial-backspace" id="btnDialBackspace" title="Delete digit">⌫</button>
+        </div>
+
+        <div class="dial-grid">
+          <div class="dial-key" data-digit="1"><div class="dial-key-digit">1</div><div class="dial-key-letters">&nbsp;</div></div>
+          <div class="dial-key" data-digit="2"><div class="dial-key-digit">2</div><div class="dial-key-letters">ABC</div></div>
+          <div class="dial-key" data-digit="3"><div class="dial-key-digit">3</div><div class="dial-key-letters">DEF</div></div>
+          <div class="dial-key" data-digit="4"><div class="dial-key-digit">4</div><div class="dial-key-letters">GHI</div></div>
+          <div class="dial-key" data-digit="5"><div class="dial-key-digit">5</div><div class="dial-key-letters">JKL</div></div>
+          <div class="dial-key" data-digit="6"><div class="dial-key-digit">6</div><div class="dial-key-letters">MNO</div></div>
+          <div class="dial-key" data-digit="7"><div class="dial-key-digit">7</div><div class="dial-key-letters">PQRS</div></div>
+          <div class="dial-key" data-digit="8"><div class="dial-key-digit">8</div><div class="dial-key-letters">TUV</div></div>
+          <div class="dial-key" data-digit="9"><div class="dial-key-digit">9</div><div class="dial-key-letters">WXYZ</div></div>
+          <div class="dial-key" data-digit="*"><div class="dial-key-digit">*</div><div class="dial-key-letters">&nbsp;</div></div>
+          <div class="dial-key" data-digit="0"><div class="dial-key-digit">0</div><div class="dial-key-letters">+</div></div>
+          <div class="dial-key" data-digit="#"><div class="dial-key-digit">#</div><div class="dial-key-letters">&nbsp;</div></div>
+        </div>
+
+        <div class="dial-actions">
+          <button class="btn-dial-voice" id="btnDialVoice">📞 Voice Call</button>
+          <button class="btn-dial-video" id="btnDialVideo">📹 Video Call</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Directory & Peers -->
+    <div id="tabContentDirectory" hidden>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <input type="text" class="wd-input" id="searchDirectoryInput" placeholder="🔍 Search contacts by name, number, or device…" style="flex:1">
+        <button class="wd-btn wd-btn-primary" id="btnAddContact">+ Add Contact</button>
+      </div>
+      <div id="directoryList"></div>
+    </div>
+
+    <!-- Tab 3: Recent Calls -->
+    <div id="tabContentRecents" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <span style="font-size:13px;color:var(--wd-muted)" id="recentsCountText">All call history saved locally</span>
+        <button class="wd-btn wd-btn-sm" id="btnClearRecents">Clear History</button>
+      </div>
+      <div id="recentsList"></div>
+    </div>
+
+    <!-- Tab 4: Network & Audio Settings -->
+    <div id="tabContentSettings" hidden>
+      <div class="wd-card" style="margin-bottom:14px">
+        <h3 style="margin-top:0">Caller Profile & Number</h3>
+        <p class="wd-muted wd-small">Your assigned Caller ID is your unique identifier across Internet, Wi-Fi, Bluetooth, and Radiowave mesh networks.</p>
+        <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
+          <button class="wd-btn wd-btn-primary wd-btn-sm" id="btnEditProfile">Edit Name & Number</button>
+          <button class="wd-btn wd-btn-sm" id="btnCopyMyNumber">📋 Copy My Number</button>
+        </div>
+      </div>
+
+      <div class="wd-card" style="margin-bottom:14px">
+        <h3 style="margin-top:0">Audio & Ringtone Test</h3>
+        <p class="wd-muted wd-small">Test microphone levels and synthesized dial / ring tones.</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+          <button class="wd-btn wd-btn-sm" id="btnTestRingTone">🔔 Test Ringtone Sound</button>
+          <button class="wd-btn wd-btn-sm" id="btnTestDtmf">🎵 Test Dial Tones</button>
+        </div>
+      </div>
+
+      <div class="wd-card">
+        <h3 style="margin-top:0">Multi-Transport Mesh Diagnostics</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px;margin-top:12px">
+          <div style="background:var(--wd-surface);padding:12px;border-radius:8px;border:1px solid var(--wd-border)">
+            <div style="font-weight:700">🌐 Internet WebRTC</div>
+            <div class="wd-small wd-muted">STUN/TURN Signaling · Active</div>
+          </div>
+          <div style="background:var(--wd-surface);padding:12px;border-radius:8px;border:1px solid var(--wd-border)">
+            <div style="font-weight:700">📶 Local Wi-Fi</div>
+            <div class="wd-small wd-muted">Device Link Socket · Ready</div>
+          </div>
+          <div style="background:var(--wd-surface);padding:12px;border-radius:8px;border:1px solid var(--wd-border)">
+            <div style="font-weight:700">ᛒ Bluetooth BLE</div>
+            <div class="wd-small wd-muted">Proximity Audio · Low-Latency</div>
+          </div>
+          <div style="background:var(--wd-surface);padding:12px;border-radius:8px;border:1px solid var(--wd-border)">
+            <div style="font-weight:700">📡 Radiowave Mesh</div>
+            <div class="wd-small wd-muted">Ad-Hoc Offline RF · 433/915 MHz</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Caller ID Setup / First-Time Onboarding Modal -->
+  <div class="call-modal-overlay" id="onboardingModal" hidden>
+    <div class="call-modal">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="font-size:32px">📱</div>
+        <div>
+          <h2 style="margin:0;font-size:18px" id="modalTitle">Set Up Your WebDeck Caller ID</h2>
+          <div class="wd-small wd-muted">P2P calls over Internet, Wi-Fi, Bluetooth & Radiowave</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:6px">Your Display Name</label>
+        <input type="text" class="wd-input" id="inputProfileName" placeholder="e.g. Alex (Laptop)" style="width:100%">
+      </div>
+
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="font-size:12px;font-weight:700">Your Phone / Caller Number</label>
+          <button type="button" class="wd-btn wd-btn-sm" id="btnGenRandomNumber" style="font-size:11px;padding:3px 10px;background:rgba(56,139,253,.15);color:#388BFD;border-color:rgba(56,139,253,.3)">
+            🎲 Generate Random Number
+          </button>
+        </div>
+        <input type="text" class="wd-input" id="inputProfileNumber" placeholder="+1 (555) 000-0000 or enter your number" style="width:100%">
+        <div class="wd-small" id="numberValidationMsg" style="margin-top:6px;font-size:12px;color:var(--wd-muted)">
+          Pick any number or tap "Generate Random Number" to protect your privacy.
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px">
+        <button class="wd-btn" id="btnCancelModal" style="display:none">Cancel</button>
+        <button class="wd-btn wd-btn-primary" id="btnSaveProfile">Claim Number & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming Call Modal -->
+  <div class="call-modal-overlay" id="incomingCallModal" hidden>
+    <div class="call-modal" style="text-align:center;max-width:380px">
+      <div class="incoming-pulse" style="width:84px;height:84px;border-radius:50%;background:#16A34A;display:grid;place-items:center;font-size:40px;color:#fff;margin:0 auto 16px">
+        📞
+      </div>
+      <h2 style="margin:0 0 6px 0;font-size:22px" id="incomingCallerName">Jane Doe</h2>
+      <div style="font-size:15px;color:var(--wd-muted)" id="incomingCallerNumber">+1 (555) 492-1829</div>
+      <div class="wd-badge" id="incomingTransportBadge" style="margin:10px auto;display:inline-block;background:rgba(22,163,74,.2);color:#10B981">
+        📶 Incoming Wi-Fi Call
+      </div>
+
+      <div style="display:flex;gap:14px;justify-content:center;margin-top:24px">
+        <button class="call-btn btn-hangup" id="btnDeclineIncoming" title="Decline">✕</button>
+        <button class="call-btn" id="btnAcceptVoice" style="background:#16A34A;color:#fff" title="Accept Voice">📞</button>
+        <button class="call-btn" id="btnAcceptVideo" style="background:#8B5CF6;color:#fff" title="Accept Video">📹</button>
+      </div>
     </div>
   </div>
 

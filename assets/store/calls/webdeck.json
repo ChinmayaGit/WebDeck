@@ -1,12 +1,12 @@
 {
   "id": "calls",
   "name": "Voice & Video Calls",
-  "version": "1.0.0",
-  "description": "Call your own devices over local Wi-Fi, peer-to-peer with Device Link. Low-latency encrypted audio, HD video, and camera switching.",
+  "version": "1.1.0",
+  "description": "P2P Voice & Video Calling over Internet, Local Wi-Fi, Bluetooth & Radiowave Mesh. Set your custom Caller ID or generate random private numbers, dial peers directly, and enjoy encrypted real-time audio and HD video.",
   "category": "Network",
   "icon": "call",
   "color": "#16A34A",
-  "permissions": ["net", "link"],
+  "permissions": ["net", "link", "notify", "localnet"],
   "essential": false,
   "author": "WebDeck"
 }
