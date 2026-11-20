@@ -38,7 +38,7 @@ class RuntimePermission {
       case shell:
         return 'Run any command on this computer (full access to your files)';
       case link:
-        return 'Send and receive files, messages and clipboard with your paired devices';
+        return 'Connect with your paired devices and other WebDeck users (calls, messages, files, clipboard)';
       default:
         return permission;
     }

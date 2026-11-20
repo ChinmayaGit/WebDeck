@@ -221,6 +221,17 @@
       cancel: (taskId) => call('tasks.cancel', { id: taskId }),
     },
 
+    /** WebDeck Cloud: reach other WebDeck users over the internet by number. Requires "link". */
+    cloud: {
+      status: () => call('cloud.status'),
+      connect: () => call('cloud.connect'),
+      available: (number) => call('cloud.available', { number }),
+      setProfile: (profile) => call('cloud.setProfile', profile || {}),
+      lookup: (number) => call('cloud.lookup', { number }),
+      send: (to, channel, payload) => call('cloud.send', { to, channel, payload }),
+      inbox: (opts) => call('cloud.inbox', opts || {}),
+    },
+
     /** Device Link: paired WebDeck devices on the local network. Requires "link". */
     link: {
       status: () => call('link.status'),

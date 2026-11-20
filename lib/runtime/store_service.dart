@@ -172,6 +172,33 @@ class StoreService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Silently updates installed built-in apps whose bundled copy is newer, so a
+  /// new WebDeck build reloads them on every device. Updates that would add
+  /// permissions are left for the user to approve in the Store.
+  Future<int> updateBundledApps() async {
+    var updated = 0;
+    final installed = {
+      for (final a in await _repository.getInstalledApps()) a.id: a,
+    };
+    for (final e in _entries.where((e) => e.bundled)) {
+      final app = installed[e.id];
+      if (app == null || compareVersions(e.manifest.version, app.version) <= 0) {
+        continue;
+      }
+      final newPerms = e.manifest.permissions.difference(
+        app.manifest?.permissions ?? const {},
+      );
+      if (newPerms.isNotEmpty || !e.manifest.supportsCurrentPlatform) continue;
+      try {
+        await install(e);
+        updated++;
+      } catch (err) {
+        debugPrint('Auto-update of ${e.id} failed: $err');
+      }
+    }
+    return updated;
+  }
+
   Future<List<StoreEntry>> _loadBundled() async {
     final catalog = jsonDecode(
       await _bundle.loadString('assets/store/catalog.json'),

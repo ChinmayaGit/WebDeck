@@ -368,37 +368,39 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/icons/app_icon.png',
-                width: 32,
-                height: 32,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: WebDeckTheme.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: WebDeckTheme.primary.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.rocket_launch,
-                    color: WebDeckTheme.primary,
-                    size: 18,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Text('WebDeck'),
-          ],
-        ),
+        title: const Text('WebDeck'),
+
+        // Row(
+        //   mainAxisSize: MainAxisSize.min,
+        //   children: [
+        //     ClipRRect(
+        //       borderRadius: BorderRadius.circular(8),
+        //       child: Image.asset(
+        //         'assets/icons/app_icon.png',
+        //         width: 32,
+        //         height: 32,
+        //         fit: BoxFit.cover,
+        //         errorBuilder: (_, _, _) => Container(
+        //           padding: const EdgeInsets.all(6),
+        //           decoration: BoxDecoration(
+        //             color: WebDeckTheme.primary.withValues(alpha: 0.15),
+        //             borderRadius: BorderRadius.circular(8),
+        //             border: Border.all(
+        //               color: WebDeckTheme.primary.withValues(alpha: 0.3),
+        //             ),
+        //           ),
+        //           child: const Icon(
+        //             Icons.rocket_launch,
+        //             color: WebDeckTheme.primary,
+        //             size: 18,
+        //           ),
+        //         ),
+        //       ),
+        //     ),
+        //     const SizedBox(width: 10),
+        //     const Text('WebDeck'),
+        //   ],
+        // ),
         actions: [
           // Backup & Restore Popup Menu
           PopupMenuButton<String>(

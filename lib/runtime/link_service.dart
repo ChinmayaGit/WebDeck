@@ -503,7 +503,10 @@ class LinkService extends ChangeNotifier {
     _inbox.add(m);
     await _saveInbox();
     notifyListeners();
-    if (channel == 'chat') {
+    if (channel == 'call_signal' && payload['type'] == 'invite') {
+      final kind = payload['isVideo'] == true ? 'video' : 'voice';
+      unawaited(_notifications.post(appId: 'calls', appName: 'Calls', title: 'Incoming $kind call', body: 'From ${payload['callerName'] ?? peer.name}. Open Calls to answer.'));
+    } else if (channel == 'chat') {
       unawaited(_notifications.post(appId: 'messages', appName: 'Messages', title: peer.name, body: '${payload['text'] ?? ''}'));
     } else if (channel == 'files') {
       unawaited(_notifications.post(appId: 'nearby-share', appName: 'Nearby Share', title: 'Received ${payload['name']}', body: 'From ${peer.name}. Saved to Downloads/WebDeck/Received.'));

@@ -11,6 +11,7 @@ import '../../../runtime/settings_service.dart';
 import '../../../runtime/store_service.dart';
 import '../../../runtime/tools_service.dart';
 import '../../core/theme.dart';
+import '../store/extension_builder_sheet.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -19,7 +20,19 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsService>();
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton.tonalIcon(
+              onPressed: () => showExtensionBuilder(context),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Build extension'),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         children: [
@@ -68,6 +81,16 @@ class SettingsScreen extends StatelessWidget {
                   const _LinkCard(),
                   const _Header('Tools'),
                   const _ToolsCard(),
+                  const _Header('Extensions'),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.extension_outlined),
+                      title: const Text('Build or upload an extension'),
+                      subtitle: const Text('Step-by-step guide and an AI skill: describe what you want and any AI can build it.'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => showExtensionBuilder(context),
+                    ),
+                  ),
                   const _Header('Store sources'),
                   const _CatalogsCard(),
                   const _Header('Storage'),
@@ -77,7 +100,7 @@ class SettingsScreen extends StatelessWidget {
                     child: ListTile(
                       leading: Icon(Icons.info_outline),
                       title: Text('WebDeck'),
-                      subtitle: Text('Runtime API $kRuntimeApiVersion · build apps with webdeck.json — see docs/building-apps.md'),
+                      subtitle: Text('Runtime API $kRuntimeApiVersion · build extensions with webdeck.json · Settings → Extensions'),
                     ),
                   ),
                 ],

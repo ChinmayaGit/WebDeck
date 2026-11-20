@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
@@ -11,6 +12,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../data/models/installed_app.dart';
+import '../../../../runtime/app_icons.dart';
 import '../../../core/theme.dart';
 import '../../catalog/view_models/catalog_view_model.dart';
 import '../../catalog/views/backend_console_dialog.dart';
@@ -35,8 +37,6 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   WebViewController? _controller;
   bool _isLoading = true;
   bool _isWebViewSupported = true;
-  bool _showControls = false;
-  Offset? _controlsOffset;
   String? _initError;
   String? _pageLoadError;
 
@@ -44,6 +44,22 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   void initState() {
     super.initState();
     _initWebView();
+  }
+
+  /// The WebView can only use the mic/camera after the app itself holds the
+  /// Android runtime permission, so ask for it before granting the page.
+  Future<void> _onMediaPermissionRequest(PlatformWebViewPermissionRequest request) async {
+    final wanted = <Permission>[
+      if (request.types.contains(WebViewPermissionResourceType.microphone)) Permission.microphone,
+      if (request.types.contains(WebViewPermissionResourceType.camera)) Permission.camera,
+    ];
+    if (wanted.isEmpty) return request.grant();
+    var ok = true;
+    try {
+      final results = await wanted.request();
+      ok = results.values.every((s) => s.isGranted || s.isLimited);
+    } catch (_) {}
+    return ok ? request.grant() : request.deny();
   }
 
   void _initWebView() {
@@ -104,6 +120,11 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
         ),
       );
 
+      if (controller.platform is WebKitWebViewController) {
+        // getUserMedia (calls, scanners): macOS shows its own mic/camera prompt.
+        controller.platform.setOnPlatformPermissionRequest((request) => request.grant());
+      }
+
       if (controller.platform is AndroidWebViewController) {
         final androidController = controller.platform as AndroidWebViewController;
         AndroidWebViewController.enableDebugging(true);
@@ -111,7 +132,7 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
         androidController.setAllowFileAccess(true);
         androidController.setAllowContentAccess(true);
         androidController.setMixedContentMode(MixedContentMode.alwaysAllow);
-        androidController.setOnPlatformPermissionRequest((request) => request.grant());
+        androidController.setOnPlatformPermissionRequest(_onMediaPermissionRequest);
         androidController.setOnShowFileSelector((FileSelectorParams params) async {
           try {
             FileType pickerType = FileType.any;
@@ -208,176 +229,100 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
     );
   }
 
+  Future<void> _goBack() async {
+    final controller = _controller;
+    if (controller != null && await controller.canGoBack()) {
+      await controller.goBack();
+    } else if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  PreferredSizeWidget _appBar() {
+    final m = widget.app.manifest;
+    final ready = _isWebViewSupported && _controller != null;
+    return AppBar(
+      toolbarHeight: 48,
+      backgroundColor: WebDeckTheme.surface,
+      surfaceTintColor: Colors.transparent,
+      titleSpacing: 0,
+      leading: IconButton(
+        tooltip: 'Back',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: _goBack,
+      ),
+      title: Row(
+        children: [
+          if (m != null) ...[
+            AppGlyphTile(glyph: m.icon, color: m.color, size: 26),
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: Text(
+              widget.app.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (ready)
+          IconButton(
+            tooltip: 'Reload',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _controller?.reload(),
+          ),
+        IconButton(
+          tooltip: 'Open in system browser',
+          icon: const Icon(Icons.open_in_browser),
+          onPressed: _openInExternalBrowser,
+        ),
+        if (widget.app.backendRequirement?.hasRequirements == true)
+          IconButton(
+            tooltip: 'Backend console (DB / Test API)',
+            icon: const Icon(Icons.dns_rounded),
+            onPressed: _openBackendConsole,
+          ),
+        IconButton(
+          tooltip: 'Close app',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(width: 4),
+      ],
+      bottom: _isLoading && _isWebViewSupported
+          ? const PreferredSize(
+              preferredSize: Size.fromHeight(2.5),
+              child: LinearProgressIndicator(
+                minHeight: 2.5,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation(WebDeckTheme.primary),
+              ),
+            )
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // True in-app native browser experience without external browser windows or URL bars
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        final controller = _controller;
-        if (controller != null && await controller.canGoBack()) {
-          await controller.goBack();
-        } else {
-          if (context.mounted) {
-            Navigator.of(context).pop();
-          }
-        }
+        if (!didPop) await _goBack();
       },
       child: Scaffold(
         backgroundColor: WebDeckTheme.background,
+        appBar: _appBar(),
         body: SafeArea(
-          top: !_showControls,
+          top: false,
           bottom: false,
-          child: Stack(
-            children: [
-              // Embedded Native WebView (Full Screen)
-              Positioned.fill(
-                child: !_isWebViewSupported
-                    ? _buildFallbackView()
-                    : _pageLoadError != null
-                        ? _buildPageLoadErrorView()
-                        : WebViewWidget(controller: _controller!),
-              ),
-
-              // Subtle top progress bar while loading
-              if (_isLoading && _isWebViewSupported)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: LinearProgressIndicator(
-                    minHeight: 2.5,
-                    backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation(WebDeckTheme.primary),
-                  ),
-                ),
-
-              // Floating Draggable Minimal Control Capsule
-              Builder(
-                builder: (context) {
-                  final size = MediaQuery.sizeOf(context);
-                  final paddingTop = MediaQuery.paddingOf(context).top;
-                  final defaultX = (size.width - (_showControls ? 230.0 : 48.0) - 16.0).clamp(8.0, size.width - 48.0);
-                  final defaultY = (paddingTop + 12.0).clamp(8.0, size.height - 48.0);
-                  final currentX = (_controlsOffset?.dx ?? defaultX).clamp(8.0, (size.width - 48.0).clamp(8.0, double.infinity));
-                  final currentY = (_controlsOffset?.dy ?? defaultY).clamp(paddingTop + 4.0, (size.height - 48.0).clamp(paddingTop + 4.0, double.infinity));
-
-                  return Positioned(
-                    left: currentX,
-                    top: currentY,
-                    child: GestureDetector(
-                      onPanUpdate: (details) {
-                        setState(() {
-                          _controlsOffset = Offset(
-                            currentX + details.delta.dx,
-                            currentY + details.delta.dy,
-                          );
-                        });
-                      },
-                      child: MouseRegion(
-                        onEnter: (_) => setState(() => _showControls = true),
-                        onExit: (_) => setState(() => _showControls = false),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: _showControls ? 8.0 : 4.0,
-                            vertical: 4.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: WebDeckTheme.surface.withValues(
-                              alpha: _showControls ? 0.95 : 0.75,
-                            ),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: WebDeckTheme.border.withValues(
-                                alpha: _showControls ? 0.9 : 0.5,
-                              ),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.35),
-                                blurRadius: 10,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Move / drag handle icon
-                              GestureDetector(
-                                onLongPress: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Drag to move this button anywhere on screen'),
-                                      duration: Duration(seconds: 1),
-                                    ),
-                                  );
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: Icon(
-                                    Icons.drag_indicator,
-                                    size: 16,
-                                    color: WebDeckTheme.textSecondary.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                              ),
-                              if (_showControls) ...[
-                                Text(
-                                  widget.app.name,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: WebDeckTheme.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                if (_isWebViewSupported && _controller != null)
-                                  IconButton(
-                                    icon: const Icon(Icons.refresh, size: 16),
-                                    tooltip: 'Reload',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => _controller?.reload(),
-                                  ),
-                                IconButton(
-                                  icon: const Icon(Icons.open_in_browser, size: 16),
-                                  tooltip: 'Open in System Browser',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: _openInExternalBrowser,
-                                ),
-                                if (widget.app.backendRequirement?.hasRequirements == true)
-                                  IconButton(
-                                    icon: const Icon(Icons.dns_rounded, size: 16),
-                                    tooltip: 'Backend Console (DB / Test API)',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: _openBackendConsole,
-                                  ),
-                                const SizedBox(width: 2),
-                              ],
-                              GestureDetector(
-                                onLongPress: () {
-                                  // Long-press also expands controls / signals drag
-                                  setState(() => _showControls = !_showControls);
-                                },
-                                child: IconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  tooltip: 'Exit App (or Drag Move)',
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () => Navigator.of(context).pop(),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+          child: !_isWebViewSupported
+              ? _buildFallbackView()
+              : _pageLoadError != null
+                  ? _buildPageLoadErrorView()
+                  : WebViewWidget(controller: _controller!),
         ),
       ),
     );

@@ -1,13 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/installed_app.dart';
 import '../../../runtime/app_icons.dart';
 import '../../../runtime/manifest.dart';
+import '../../../runtime/settings_service.dart';
 import '../../../runtime/store_service.dart';
 import '../../core/theme.dart';
 import '../catalog/view_models/catalog_view_model.dart';
 import '../shell/app_launcher.dart';
+import 'extension_builder_sheet.dart';
+
+enum _StoreView { grid, list, icons }
 
 class StoreScreen extends StatefulWidget {
   const StoreScreen({super.key});
@@ -21,10 +27,44 @@ class _StoreScreenState extends State<StoreScreen> {
   String? _category;
   bool _essentialOnly = false;
 
+  /// Most recent install/update, surfaced in the app bar instead of a sticky snackbar.
+  InstalledApp? _recent;
+  bool _recentWasUpdate = false;
+  Timer? _recentTimer;
+
+  @override
+  void dispose() {
+    _recentTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showRecent(InstalledApp app, {required bool update}) {
+    _recentTimer?.cancel();
+    setState(() {
+      _recent = app;
+      _recentWasUpdate = update;
+    });
+    _recentTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted) setState(() => _recent = null);
+    });
+  }
+
+  void _clearRecent() {
+    _recentTimer?.cancel();
+    setState(() => _recent = null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<StoreService>();
     final catalog = context.watch<CatalogViewModel>();
+    final settings = context.watch<SettingsService>();
+    final view = _StoreView.values.firstWhere(
+      (v) => v.name == settings.storeView,
+      orElse: () => _StoreView.grid,
+    );
+    // List view is always vertical, so it never needs squeezing.
+    final squeeze = settings.storeSqueeze || view == _StoreView.list;
     final installed = {for (final a in catalog.apps) a.id: a};
     final browsing = _category == null && _query.isEmpty && !_essentialOnly;
 
@@ -49,14 +89,49 @@ class _StoreScreenState extends State<StoreScreen> {
           compareVersions(e.manifest.version, app.version) > 0;
     }).toList();
 
-    _AppTile tile(StoreEntry e) => _AppTile(
-      entry: e,
-      installed: installed[e.id],
-      installing: store.isInstalling(e.id),
-      onDetails: () => _showDetails(context, e),
-      onInstall: () => _install(context, e),
-      onOpen: () => openRuntimeApp(context, catalog, installed[e.id]!),
-    );
+    Widget item(StoreEntry e) {
+      final args = (
+        installed: installed[e.id],
+        installing: store.isInstalling(e.id),
+        onDetails: () => _showDetails(context, e),
+        onInstall: () => _install(context, e),
+        onOpen: () => openRuntimeApp(context, catalog, installed[e.id]!),
+      );
+      return switch (view) {
+        _StoreView.grid => _AppTile(
+          entry: e,
+          installed: args.installed,
+          installing: args.installing,
+          onDetails: args.onDetails,
+          onInstall: args.onInstall,
+          onOpen: args.onOpen,
+        ),
+        _StoreView.list => _ListRow(
+          entry: e,
+          installed: args.installed,
+          installing: args.installing,
+          onDetails: args.onDetails,
+          onInstall: args.onInstall,
+          onOpen: args.onOpen,
+        ),
+        _StoreView.icons => _IconTile(
+          entry: e,
+          installed: args.installed,
+          installing: args.installing,
+          onDetails: args.onDetails,
+        ),
+      };
+    }
+
+    // Size of one item for the current view: (width, height).
+    final itemSize = switch (view) {
+      _StoreView.grid => (250.0, 150.0),
+      _StoreView.list => (520.0, 72.0),
+      _StoreView.icons => (104.0, 118.0),
+    };
+
+    Widget section(List<Widget> tiles, {(double, double)? size}) =>
+        _row(tiles, size ?? itemSize, squeeze: squeeze);
 
     final featured = store.entries.where((e) => e.featured).toList();
     final mine = store.entries
@@ -68,6 +143,15 @@ class _StoreScreenState extends State<StoreScreen> {
         onRefresh: store.refresh,
         child: CustomScrollView(
           slivers: [
+            _appBar(
+              context,
+              view: view,
+              squeeze: settings.storeSqueeze,
+              settings: settings,
+              updates: updates,
+              store: store,
+              catalog: catalog,
+            ),
             SliverToBoxAdapter(
               child: _Hero(
                 appCount: store.entries.length,
@@ -75,13 +159,6 @@ class _StoreScreenState extends State<StoreScreen> {
                 installedCount: mine.length,
                 query: _query,
                 onSearch: (v) => setState(() => _query = v.trim()),
-                updates: updates.length,
-                onUpdateAll: () async {
-                  for (final e in updates) {
-                    await _install(context, e, confirmPermissions: false);
-                  }
-                },
-                onRefresh: store.loading ? null : store.refresh,
               ),
             ),
             SliverToBoxAdapter(
@@ -159,28 +236,22 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               if (featured.isNotEmpty) ...[
                 _sectionTitle('Featured'),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 190,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: featured.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 14),
-                      itemBuilder: (ctx, i) => _FeaturedCard(
-                        entry: featured[i],
-                        installed: installed[featured[i].id],
-                        installing: store.isInstalling(featured[i].id),
-                        onDetails: () => _showDetails(context, featured[i]),
-                        onInstall: () => _install(context, featured[i]),
-                        onOpen: () => openRuntimeApp(
-                          context,
-                          catalog,
-                          installed[featured[i].id]!,
-                        ),
+                _row(
+                  [
+                    for (final f in featured)
+                      _FeaturedCard(
+                        entry: f,
+                        installed: installed[f.id],
+                        installing: store.isInstalling(f.id),
+                        onDetails: () => _showDetails(context, f),
+                        onInstall: () => _install(context, f),
+                        onOpen: () =>
+                            openRuntimeApp(context, catalog, installed[f.id]!),
                       ),
-                    ),
-                  ),
+                  ],
+                  (330, 190),
+                  squeeze: settings.storeSqueeze,
+                  spacing: 14,
                 ),
               ],
               if (mine.isNotEmpty) ...[
@@ -188,7 +259,7 @@ class _StoreScreenState extends State<StoreScreen> {
                   'Your apps',
                   trailing: '${mine.length} installed',
                 ),
-                _row([for (final e in mine) tile(e)]),
+                section([for (final e in mine) item(e)]),
               ],
               for (final cat in store.categories) ...[
                 _sectionTitle(
@@ -196,18 +267,20 @@ class _StoreScreenState extends State<StoreScreen> {
                   category: store.category(cat),
                   onSeeAll: () => setState(() => _category = cat),
                 ),
-                _row([
+                section([
                   for (final e in entries.where(
                     (e) => e.manifest.category == cat,
                   ))
-                    tile(e),
+                    item(e),
                 ]),
               ],
               if (store.upcoming.isNotEmpty) ...[
                 _sectionTitle('Coming soon', trailing: 'In development'),
-                _row([
-                  for (final u in store.upcoming) _UpcomingTile(upcoming: u),
-                ]),
+                _row(
+                  [for (final u in store.upcoming) _UpcomingTile(upcoming: u)],
+                  (250, 150),
+                  squeeze: squeeze,
+                ),
               ],
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ] else ...[
@@ -222,6 +295,7 @@ class _StoreScreenState extends State<StoreScreen> {
                         onPressed: () => setState(() {
                           _category = null;
                           _query = '';
+                          _essentialOnly = false;
                         }),
                         icon: const Icon(Icons.arrow_back),
                       ),
@@ -235,7 +309,10 @@ class _StoreScreenState extends State<StoreScreen> {
                       ],
                       Expanded(
                         child: Text(
-                          _category ?? 'Results for “$_query”',
+                          _category ??
+                              (_query.isEmpty
+                                  ? 'Essential apps'
+                                  : 'Results for “$_query”'),
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
@@ -263,13 +340,204 @@ class _StoreScreenState extends State<StoreScreen> {
                     ),
                   ),
                 )
-              else
-                _grid(context, entries, installed, store, catalog, bottom: 32),
+              else if (view == _StoreView.grid)
+                _grid(context, entries, installed, store, catalog, bottom: 32)
+              else ...[
+                _row([for (final e in entries) item(e)], itemSize, squeeze: true),
+                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              ],
             ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _appBar(
+    BuildContext context, {
+    required _StoreView view,
+    required bool squeeze,
+    required SettingsService settings,
+    required List<StoreEntry> updates,
+    required StoreService store,
+    required CatalogViewModel catalog,
+  }) {
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    final recent = _recent;
+
+    Widget viewToggle() => SegmentedButton<_StoreView>(
+      showSelectedIcon: false,
+      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      segments: const [
+        ButtonSegment(
+          value: _StoreView.grid,
+          icon: Icon(Icons.grid_view_rounded, size: 18),
+          tooltip: 'Grid',
+        ),
+        ButtonSegment(
+          value: _StoreView.list,
+          icon: Icon(Icons.view_list_rounded, size: 18),
+          tooltip: 'List',
+        ),
+        ButtonSegment(
+          value: _StoreView.icons,
+          icon: Icon(Icons.apps_rounded, size: 18),
+          tooltip: 'Apps (icons)',
+        ),
+      ],
+      selected: {view},
+      onSelectionChanged: (s) => settings.setStoreView(s.first.name),
+    );
+
+    Widget squeezeToggle() => IconButton(
+      tooltip: view == _StoreView.list
+          ? 'List view never scrolls sideways'
+          : squeeze
+          ? 'Squeeze: on (wrap rows, no sideways scrolling)'
+          : 'Squeeze: off (rows scroll sideways)',
+      isSelected: squeeze,
+      onPressed: view == _StoreView.list
+          ? null
+          : () => settings.setStoreSqueeze(!squeeze),
+      icon: const Icon(Icons.view_carousel_outlined),
+      selectedIcon: const Icon(Icons.wrap_text_rounded),
+      style: IconButton.styleFrom(
+        backgroundColor: squeeze && view != _StoreView.list
+            ? WebDeckTheme.primary.withValues(alpha: 0.2)
+            : null,
+      ),
+    );
+
+    Widget recentChip() => ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: narrow ? 150 : 280),
+      child: InputChip(
+        avatar: const Icon(
+          Icons.check_circle,
+          size: 18,
+          color: WebDeckTheme.accentGreen,
+        ),
+        label: Text(
+          narrow
+              ? 'Open ${recent!.name}'
+              : '${recent!.name} ${_recentWasUpdate ? 'updated' : 'installed'} · Open',
+          overflow: TextOverflow.ellipsis,
+        ),
+        tooltip: 'Open ${recent.name}',
+        backgroundColor: WebDeckTheme.accentGreen.withValues(alpha: 0.15),
+        side: BorderSide(
+          color: WebDeckTheme.accentGreen.withValues(alpha: 0.5),
+        ),
+        onPressed: () {
+          _clearRecent();
+          openRuntimeApp(context, catalog, recent);
+        },
+        onDeleted: _clearRecent,
+        deleteIcon: const Icon(Icons.close, size: 16),
+      ),
+    );
+
+    Widget updateButton() => narrow
+        ? IconButton(
+            tooltip: 'Update ${updates.length} app(s)',
+            onPressed: () => _updateAll(context, updates),
+            icon: Badge(
+              label: Text('${updates.length}'),
+              child: const Icon(Icons.system_update_alt),
+            ),
+          )
+        : FilledButton.tonalIcon(
+            onPressed: () => _updateAll(context, updates),
+            icon: const Icon(Icons.system_update_alt, size: 18),
+            label: Text('Update ${updates.length}'),
+          );
+
+    return SliverAppBar(
+      pinned: true,
+      backgroundColor: WebDeckTheme.surface,
+      surfaceTintColor: Colors.transparent,
+      titleSpacing: 16,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.storefront, color: WebDeckTheme.primary),
+          const SizedBox(width: 10),
+          Text(
+            narrow ? 'Store' : 'WebDeck Store',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+      actions: [
+        if (recent != null) ...[recentChip(), const SizedBox(width: 6)],
+        if (updates.isNotEmpty) ...[updateButton(), const SizedBox(width: 6)],
+        if (narrow)
+          PopupMenuButton<String>(
+            tooltip: 'View options',
+            icon: Icon(switch (view) {
+              _StoreView.grid => Icons.grid_view_rounded,
+              _StoreView.list => Icons.view_list_rounded,
+              _StoreView.icons => Icons.apps_rounded,
+            }),
+            onSelected: (v) {
+              if (v == 'squeeze') {
+                settings.setStoreSqueeze(!squeeze);
+              } else {
+                settings.setStoreView(v);
+              }
+            },
+            itemBuilder: (_) => [
+              for (final (v, icon, label) in [
+                (_StoreView.grid, Icons.grid_view_rounded, 'Grid'),
+                (_StoreView.list, Icons.view_list_rounded, 'List'),
+                (_StoreView.icons, Icons.apps_rounded, 'Apps (icons)'),
+              ])
+                CheckedPopupMenuItem(
+                  value: v.name,
+                  checked: view == v,
+                  child: Row(
+                    children: [Icon(icon, size: 18), const SizedBox(width: 10), Text(label)],
+                  ),
+                ),
+              const PopupMenuDivider(),
+              CheckedPopupMenuItem(
+                value: 'squeeze',
+                checked: squeeze,
+                enabled: view != _StoreView.list,
+                child: const Text('Squeeze (no sideways scroll)'),
+              ),
+            ],
+          )
+        else ...[
+          viewToggle(),
+          const SizedBox(width: 4),
+          squeezeToggle(),
+        ],
+        IconButton(
+          tooltip: 'Refresh catalogs',
+          onPressed: store.loading ? null : store.refresh,
+          icon: const Icon(Icons.refresh),
+        ),
+        if (narrow)
+          IconButton.filledTonal(
+            tooltip: 'Build an extension',
+            onPressed: () => showExtensionBuilder(context),
+            icon: const Icon(Icons.add),
+          )
+        else
+          FilledButton.tonalIcon(
+            onPressed: () => showExtensionBuilder(context),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Build extension'),
+          ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Future<void> _updateAll(BuildContext context, List<StoreEntry> updates) async {
+    for (final e in updates) {
+      await _install(context, e, confirmPermissions: false);
+    }
   }
 
   Widget _sectionTitle(
@@ -322,16 +590,38 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  Widget _row(List<Widget> tiles) {
+  /// A row of tiles: scrolls sideways normally, or wraps onto new lines
+  /// when [squeeze] is on so everything fits the screen width.
+  Widget _row(
+    List<Widget> tiles,
+    (double, double) size, {
+    required bool squeeze,
+    double spacing = 12,
+  }) {
+    final (width, height) = size;
+    if (squeeze) {
+      return SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverGrid(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: width + spacing,
+            mainAxisExtent: height,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+          ),
+          delegate: SliverChildListDelegate(tiles),
+        ),
+      );
+    }
     return SliverToBoxAdapter(
       child: SizedBox(
-        height: 150,
+        height: height,
         child: ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           scrollDirection: Axis.horizontal,
           itemCount: tiles.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 12),
-          itemBuilder: (_, i) => tiles[i],
+          separatorBuilder: (_, _) => SizedBox(width: spacing),
+          itemBuilder: (_, i) => SizedBox(width: width, child: tiles[i]),
         ),
       ),
     );
@@ -396,21 +686,7 @@ class _StoreScreenState extends State<StoreScreen> {
     try {
       final app = await store.install(entry);
       await catalog.loadApps();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            existing == null
-                ? '${app.name} installed'
-                : '${app.name} updated to ${app.version}',
-          ),
-          action: context.mounted
-              ? SnackBarAction(
-                  label: 'Open',
-                  onPressed: () => openRuntimeApp(context, catalog, app),
-                )
-              : null,
-        ),
-      );
+      if (mounted) _showRecent(app, update: existing != null);
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -848,9 +1124,6 @@ class _Hero extends StatefulWidget {
   final int installedCount;
   final String query;
   final ValueChanged<String> onSearch;
-  final int updates;
-  final VoidCallback onUpdateAll;
-  final VoidCallback? onRefresh;
 
   const _Hero({
     required this.appCount,
@@ -858,9 +1131,6 @@ class _Hero extends StatefulWidget {
     required this.installedCount,
     required this.query,
     required this.onSearch,
-    required this.updates,
-    required this.onUpdateAll,
-    required this.onRefresh,
   });
 
   @override
@@ -901,34 +1171,6 @@ class _HeroState extends State<_Hero> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.storefront, color: Colors.white, size: 26),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'WebDeck Store',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              if (widget.updates > 0)
-                FilledButton.tonalIcon(
-                  onPressed: widget.onUpdateAll,
-                  icon: const Icon(Icons.system_update_alt, size: 18),
-                  label: Text('Update ${widget.updates}'),
-                ),
-              IconButton(
-                tooltip: 'Refresh catalogs',
-                onPressed: widget.onRefresh,
-                icon: const Icon(Icons.refresh, color: Colors.white),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
           Text(
             'Free tools that run right on your device. No accounts, no servers, your files stay yours.',
             style: TextStyle(
@@ -1098,7 +1340,6 @@ class _FeaturedCard extends StatelessWidget {
     final c = AppGlyphs.parseColor(m.color);
     final hsl = HSLColor.fromColor(c);
     return SizedBox(
-      width: 330,
       child: Material(
         borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
@@ -1221,7 +1462,6 @@ class _AppTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = entry.manifest;
     return SizedBox(
-      width: 250,
       child: Card(
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
@@ -1374,6 +1614,149 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
+/// Compact single-line row used by the List view.
+class _ListRow extends StatelessWidget {
+  final StoreEntry entry;
+  final InstalledApp? installed;
+  final bool installing;
+  final VoidCallback onDetails;
+  final VoidCallback onInstall;
+  final VoidCallback onOpen;
+
+  const _ListRow({
+    required this.entry,
+    required this.installed,
+    required this.installing,
+    required this.onDetails,
+    required this.onInstall,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final m = entry.manifest;
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onDetails,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              AppGlyphTile(glyph: m.icon, color: m.color, size: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.essential ? '${m.name} ★' : m.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      _tagline(m.description),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: WebDeckTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _ActionButton(
+                entry: entry,
+                installed: installed,
+                installing: installing,
+                onInstall: onInstall,
+                onOpen: onOpen,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Launcher-style icon + name tile used by the Apps (icons) view.
+class _IconTile extends StatelessWidget {
+  final StoreEntry entry;
+  final InstalledApp? installed;
+  final bool installing;
+  final VoidCallback onDetails;
+
+  const _IconTile({
+    required this.entry,
+    required this.installed,
+    required this.installing,
+    required this.onDetails,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final m = entry.manifest;
+    final hasUpdate =
+        installed != null && compareVersions(m.version, installed!.version) > 0;
+    return Tooltip(
+      message: m.name,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onDetails,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Opacity(
+                    opacity: m.supportsCurrentPlatform ? 1 : 0.4,
+                    child: AppGlyphTile(glyph: m.icon, color: m.color, size: 58),
+                  ),
+                  if (installing)
+                    const Positioned.fill(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else if (installed != null)
+                    Positioned(
+                      right: -4,
+                      bottom: -4,
+                      child: Icon(
+                        hasUpdate ? Icons.arrow_circle_up : Icons.check_circle,
+                        size: 20,
+                        color: hasUpdate
+                            ? WebDeckTheme.primary
+                            : WebDeckTheme.accentGreen,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                m.name,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, height: 1.2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _UpcomingTile extends StatelessWidget {
   final StoreUpcoming upcoming;
   const _UpcomingTile({required this.upcoming});
@@ -1381,7 +1764,6 @@ class _UpcomingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 250,
       child: Card(
         margin: EdgeInsets.zero,
         child: Padding(

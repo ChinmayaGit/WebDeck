@@ -15,7 +15,15 @@ class SettingsService extends ChangeNotifier {
   bool _systemNotifications = true;
   bool _showFeeds = true;
   List<String> _catalogUrls = const [];
+  String _storeView = 'grid';
+  bool _storeSqueeze = false;
   bool _loaded = false;
+
+  /// Store layout: 'grid', 'list' or 'icons'.
+  String get storeView => _storeView;
+
+  /// Wrap store rows onto new lines instead of scrolling sideways.
+  bool get storeSqueeze => _storeSqueeze;
 
   /// Shows sideloading (GitHub / zip / folder installs) and backend tooling.
   bool get developerMode => _developerMode;
@@ -39,6 +47,8 @@ class SettingsService extends ChangeNotifier {
         _systemNotifications = json['systemNotifications'] as bool? ?? true;
         _showFeeds = json['showFeeds'] as bool? ?? true;
         _catalogUrls = (json['catalogUrls'] as List?)?.cast<String>() ?? const [];
+        _storeView = json['storeView'] as String? ?? 'grid';
+        _storeSqueeze = json['storeSqueeze'] as bool? ?? false;
       }
     } catch (_) {
       // Fall back to defaults on a corrupt file.
@@ -56,6 +66,8 @@ class SettingsService extends ChangeNotifier {
         'systemNotifications': _systemNotifications,
         'showFeeds': _showFeeds,
         'catalogUrls': _catalogUrls,
+        'storeView': _storeView,
+        'storeSqueeze': _storeSqueeze,
       }),
       flush: true,
     );
@@ -64,6 +76,16 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> setShowFeeds(bool val) async {
     _showFeeds = val;
+    await _save();
+  }
+
+  Future<void> setStoreView(String v) async {
+    _storeView = v;
+    await _save();
+  }
+
+  Future<void> setStoreSqueeze(bool v) async {
+    _storeSqueeze = v;
     await _save();
   }
 

@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.webdeck.launcher.webdeck"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

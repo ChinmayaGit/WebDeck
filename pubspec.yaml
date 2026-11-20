@@ -49,6 +49,8 @@ dependencies:
   webview_flutter_android: ^4.14.1
   webview_flutter_platform_interface: ^2.15.1
   crypto: ^3.0.6
+  permission_handler: ^13.0.2
+  supabase_flutter: ^2.18.3
 
 
 dev_dependencies:
@@ -82,6 +84,8 @@ flutter:
     - assets/runtime/
     - assets/runtime/vendor/
     - assets/store/
+    - assets/developer/
+    - docs/building-apps.md
     - assets/store/image-converter/
     - assets/store/free-games/
     - assets/store/price-tracker/

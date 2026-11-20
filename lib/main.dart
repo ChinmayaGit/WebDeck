@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'data/services/github_service.dart';
 import 'data/services/local_server_service.dart';
 import 'data/services/storage_service.dart';
 import 'runtime/app_data_store.dart';
+import 'runtime/cloud_service.dart';
 import 'runtime/job_scheduler.dart';
 import 'runtime/link_service.dart';
 import 'runtime/notification_service.dart';
@@ -70,6 +72,9 @@ void main() async {
   final link = LinkService(baseDir, notifications);
   await link.load();
   runtime.link = link;
+  final cloud = CloudService(notifications);
+  runtime.cloud = cloud;
+  unawaited(cloud.start());
   repository.dataStore = dataStore;
 
   final scheduler = JobScheduler(
@@ -88,19 +93,25 @@ void main() async {
   runtime.openExternalUrl = (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
 
   final store = StoreService(repository: repository, settings: settings);
-  store.refresh();
+  final catalog = CatalogViewModel(repository);
+  unawaited(
+    store.refresh().then((_) => store.updateBundledApps()).then((n) {
+      if (n > 0) catalog.loadApps();
+    }),
+  );
   scheduler.start();
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => CatalogViewModel(repository)),
+        ChangeNotifierProvider.value(value: catalog),
         ChangeNotifierProvider.value(value: settings),
         ChangeNotifierProvider.value(value: notifications),
         ChangeNotifierProvider.value(value: tools),
         ChangeNotifierProvider.value(value: scheduler),
         ChangeNotifierProvider.value(value: store),
         ChangeNotifierProvider.value(value: link),
+        ChangeNotifierProvider.value(value: cloud),
         ChangeNotifierProvider(create: (_) => ShellNavigation()),
         Provider.value(value: storageService),
         Provider.value(value: runtime),

@@ -147,7 +147,6 @@
   let activeCallPeerId = null;
   let activeCallId = null;
   let peerProfiles = {}; // Map of peerId -> { name, number }
-  let lastInboxCheck = Date.now() - 5000;
 
   function cleanNumber(num) {
     return String(num || '').replace(/[^0-9]/g, '');
@@ -208,7 +207,8 @@
     if (myProfile) {
       $('pillName').textContent = myProfile.name || 'My Device';
       $('pillNumber').textContent = myProfile.number || 'No number';
-      $('callerBadge').textContent = `${myProfile.number}`;
+      $('callerBadge').textContent = `${myProfile.number}${cloudOk ? ' · 🌐 Online' : ' · Wi-Fi only'}`;
+      $('callerBadge').title = cloudOk ? 'Reachable over the internet' : 'Internet calling is offline; only paired devices on this Wi-Fi can call you';
       if ($('bannerMyNumber')) {
         $('bannerMyNumber').textContent = myProfile.number;
       }
@@ -230,6 +230,13 @@
           msg: `⚠️ Number is already assigned to "${c.name}".`
         };
       }
+    }
+    if (cloudOk) {
+      try {
+        if (!(await wd.cloud.available(enteredNumber))) {
+          return { available: false, msg: '⚠️ That number is taken by another WebDeck user.' };
+        }
+      } catch (_) {}
     }
     return { available: true, msg: '✓ Number is available!' };
   }
@@ -268,7 +275,7 @@
           const peerName = prof ? prof.name : p.name;
           list.push({
             id: p.id,
-            peerId: p.id,
+            peerId: 'link:' + p.id,
             name: peerName,
             number: peerNum,
             platform: p.platform,
@@ -360,176 +367,439 @@
     });
   }
 
-  // --- Device Link Real Network Polling & Messaging ---
-  async function pollDeviceLink() {
+  // --- Device Link signaling ---
+  // Messages are de-duplicated by id (not by a time window) so nothing is lost
+  // while a poll is in flight. Polls never overlap.
+  const seenMsgIds = new Set();
+  let pollSince = Date.now() - 15000;
+  let polling = false;
+  let lastPresenceAt = 0;
+  const INVITE_MAX_AGE_MS = 40000;
+  const RING_TIMEOUT_MS = 45000;
+  let ringTimeout = null;
+  let pc = null;
+  let pendingRemoteCandidates = [];
+  let callIsVideo = false;
+  let callRole = null; // 'caller' | 'callee'
+
+  const ICE_SERVERS = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ];
+
+  // Peers are addressed as 'link:<deviceId>' (same Wi-Fi) or 'cloud:<userId>' (internet).
+  const viaOf = (peerKey) => (String(peerKey || '').startsWith('cloud:') ? 'cloud' : 'link');
+  const idOf = (peerKey) => String(peerKey || '').replace(/^(cloud|link):/, '');
+  const transportLabel = (peerKey) => (viaOf(peerKey) === 'cloud' ? 'Internet' : 'Wi-Fi');
+
+  function sendSignal(peerKey, payload) {
+    const msg = { ...payload, ts: Date.now() };
+    return viaOf(peerKey) === 'cloud'
+      ? wd.cloud.send(idOf(peerKey), 'call_signal', msg)
+      : wd.link.send(idOf(peerKey), 'call_signal', msg);
+  }
+
+  // --- WebDeck Cloud (internet) ---
+  let cloudOk = false;
+  let cloudPolling = false;
+  let cloudSince = Date.now() - 15000;
+
+  async function registerCloudProfile(interactive = false) {
+    if (!wd || !wd.cloud || !myProfile) return false;
     try {
-      if (!wd || !wd.link) return;
-      const status = await wd.link.status();
-      myStatus = status;
-
-      if (!status.enabled) return;
-
-      // 1. Broadcast caller profile to all paired peers
-      const peers = await wd.link.peers();
-      const paired = peers.filter(p => p.paired);
-      if (myProfile) {
-        for (const p of paired) {
-          try {
-            await wd.link.send(p.id, 'call_presence', { profile: myProfile });
-          } catch (_) {}
-        }
+      const st = await wd.cloud.connect();
+      if (!st.connected) {
+        cloudOk = false;
+        if (interactive && st.error) wd.ui.toast(st.error, 'err');
+        return false;
       }
-
-      // 2. Read incoming presence updates
-      const presenceMsgs = await wd.link.inbox({ channel: 'call_presence', since: lastInboxCheck });
-      for (const m of presenceMsgs) {
-        if (!m.outgoing && m.payload && m.payload.profile) {
-          peerProfiles[m.peerId] = m.payload.profile;
-        }
+      const remote = st.profile;
+      if (remote && remote.number_key === cleanNumber(myProfile.number) && remote.name === myProfile.name) {
+        cloudOk = true;
+        return true;
       }
-
-      // 3. Read call signals
-      const signalMsgs = await wd.link.inbox({ channel: 'call_signal', since: lastInboxCheck });
-      for (const m of signalMsgs) {
-        if (m.outgoing) continue;
-        const s = m.payload || {};
-        handleIncomingSignal(m.peerId, s);
+      try {
+        await wd.cloud.setProfile({ name: myProfile.name, number: myProfile.number });
+      } catch (e) {
+        if (e.code !== 'number_taken') throw e;
+        if (interactive) throw e;
+        // Someone else owns our number: pick a fresh free one.
+        let rand = generateRandomNumber();
+        for (let i = 0; i < 10 && !(await wd.cloud.available(rand)); i++) rand = generateRandomNumber();
+        myProfile.number = rand;
+        myProfile.updatedAt = new Date().toISOString();
+        await persistProfile();
+        await wd.cloud.setProfile({ name: myProfile.name, number: myProfile.number });
+        wd.ui.toast(`Your old number was taken; your new number is ${rand}`, 'ok');
       }
+      cloudOk = true;
+      return true;
+    } catch (e) {
+      cloudOk = false;
+      if (interactive) throw e;
+      return false;
+    } finally {
+      updateProfilePill();
+    }
+  }
 
-      lastInboxCheck = Date.now();
+  async function persistProfile() {
+    try {
+      if (wd && wd.kv) await wd.kv.set('caller_profile', myProfile);
+    } catch (_) {}
+    localStorage.setItem('wd_caller_profile', JSON.stringify(myProfile));
+  }
+
+  async function pollCloud() {
+    if (cloudPolling || !cloudOk || !wd || !wd.cloud) return;
+    cloudPolling = true;
+    try {
+      const msgs = await wd.cloud.inbox({ channel: 'call_signal', since: cloudSince });
+      let newest = cloudSince;
+      for (const m of msgs) {
+        const at = Date.parse(m.at) || 0;
+        if (at > newest) newest = at;
+        if (seenMsgIds.has('c' + m.id)) continue;
+        seenMsgIds.add('c' + m.id);
+        handleIncomingSignal('cloud:' + m.from, m.payload || {});
+      }
+      cloudSince = Math.max(cloudSince, newest - 3000);
+    } catch (_) {
+    } finally {
+      cloudPolling = false;
+    }
+  }
+
+  async function broadcastPresence(force = false) {
+    if (!myProfile || !wd || !wd.link) return;
+    if (!force && Date.now() - lastPresenceAt < 15000) return;
+    lastPresenceAt = Date.now();
+    try {
+      const peers = (await wd.link.peers()).filter((p) => p.paired && p.online);
+      // Fire in parallel and don't block the poll on slow/offline devices.
+      peers.forEach((p) => wd.link.send(p.id, 'call_presence', { profile: myProfile }).catch(() => {}));
     } catch (_) {}
   }
 
-  function handleIncomingSignal(fromPeerId, signal) {
-    if (signal.type === 'invite') {
-      if (inCall) {
-        // Busy
-        try {
-          wd.link.send(fromPeerId, 'call_signal', { type: 'hangup', callId: signal.callId, reason: 'busy' });
-        } catch (_) {}
-        return;
+  async function pollDeviceLink() {
+    if (polling || !wd || !wd.link) return;
+    polling = true;
+    try {
+      const status = await wd.link.status();
+      myStatus = status;
+      if (!status.enabled) return;
+
+      broadcastPresence();
+
+      const msgs = await wd.link.inbox({ since: pollSince });
+      let newest = pollSince;
+      for (const m of msgs) {
+        const at = Date.parse(m.at) || 0;
+        if (at > newest) newest = at;
+        if (seenMsgIds.has(m.id)) continue;
+        seenMsgIds.add(m.id);
+        if (m.outgoing || !m.payload) continue;
+        if (m.channel === 'call_presence' && m.payload.profile) {
+          const known = peerProfiles[m.peerId];
+          peerProfiles[m.peerId] = m.payload.profile;
+          if (!known || known.number !== m.payload.profile.number || known.name !== m.payload.profile.name) {
+            if (!inCall) renderDirectory($('searchDirectoryInput').value.trim());
+          }
+        } else if (m.channel === 'call_signal') {
+          handleIncomingSignal('link:' + m.peerId, m.payload);
+        }
       }
-      activeCallPeerId = fromPeerId;
-      activeCallId = signal.callId;
-      showIncomingCall({
-        name: signal.callerName || 'Paired WebDeck Device',
-        number: signal.callerNumber || '+1 (555) 000-0000',
-        transport: 'wifi',
-        callId: signal.callId,
-        isVideo: signal.isVideo === true,
-        peerId: fromPeerId
-      });
-    } else if (signal.type === 'answer') {
-      if (inCall && (!activeCallId || activeCallId === signal.callId)) {
+      // Keep a small overlap; ids prevent double handling.
+      pollSince = Math.max(pollSince, newest - 3000);
+      if (seenMsgIds.size > 2000) {
+        const keep = Array.from(seenMsgIds).slice(-1000);
+        seenMsgIds.clear();
+        keep.forEach((id) => seenMsgIds.add(id));
+      }
+    } catch (_) {
+    } finally {
+      polling = false;
+    }
+  }
+
+  // --- WebRTC media ---
+  async function getLocalMedia(isVideo) {
+    if (localStream) return localStream;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Microphone access is not available in this WebView');
+    }
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
+    } catch (e) {
+      if (!isVideo) throw e;
+      // Fall back to audio only if the camera is unavailable.
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      wd.ui.toast('Camera unavailable, continuing with audio only', 'err');
+    }
+    const hasVideo = localStream.getVideoTracks().length > 0;
+    $('localVideo').srcObject = localStream;
+    $('localPip').hidden = !hasVideo;
+    $('localPip').style.display = hasVideo ? 'block' : 'none';
+    localStream.getAudioTracks().forEach((t) => (t.enabled = !micMuted));
+    return localStream;
+  }
+
+  function createPeerConnection(peerId) {
+    closePeerConnection();
+    pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pendingRemoteCandidates = [];
+    pc.onicecandidate = (e) => {
+      if (e.candidate && activeCallId) {
+        sendSignal(peerId, { type: 'ice', callId: activeCallId, candidate: e.candidate.toJSON() }).catch(() => {});
+      }
+    };
+    pc.ontrack = (e) => {
+      const remote = $('remoteVideo');
+      const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+      if (remote.srcObject !== stream) remote.srcObject = stream;
+      remote.muted = false;
+      remote.play().catch(() => {});
+      const hasVideo = stream.getVideoTracks().length > 0;
+      remote.style.display = hasVideo ? 'block' : 'none';
+      $('callOverlayText').hidden = hasVideo;
+    };
+    pc.onconnectionstatechange = () => {
+      if (!pc) return;
+      const st = pc.connectionState;
+      if (st === 'connected') {
+        $('callHudTransport').textContent = `${transportLabel(activeCallPeerId)} P2P · encrypted`;
+        $('callHudStats').textContent = callIsVideo ? 'Opus / video' : 'Opus audio';
+        if (!callTimer) {
+          $('callWithText').textContent = $('callWithText').textContent.replace(/^Calling |…$/g, '');
+          startCallTimer();
+          startVisualizer();
+        }
+      } else if (st === 'failed') {
+        endCall('Connection failed. The networks may block direct calls (a relay server is needed).');
+      }
+    };
+    if (localStream) localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    return pc;
+  }
+
+  function closePeerConnection() {
+    if (pc) {
+      try { pc.close(); } catch (_) {}
+      pc = null;
+    }
+    pendingRemoteCandidates = [];
+    const remote = $('remoteVideo');
+    if (remote) {
+      remote.srcObject = null;
+      remote.style.display = 'none';
+    }
+  }
+
+  async function flushCandidates() {
+    if (!pc || !pc.remoteDescription) return;
+    for (const c of pendingRemoteCandidates.splice(0)) {
+      try { await pc.addIceCandidate(c); } catch (_) {}
+    }
+  }
+
+  async function handleIncomingSignal(fromPeerId, signal) {
+    const sameCall = activeCallId && signal.callId === activeCallId;
+    switch (signal.type) {
+      case 'invite': {
+        if (signal.ts && Date.now() - signal.ts > INVITE_MAX_AGE_MS) return; // stale
+        if (inCall || incomingCallData) {
+          sendSignal(fromPeerId, { type: 'hangup', callId: signal.callId, reason: 'busy' }).catch(() => {});
+          return;
+        }
+        activeCallPeerId = fromPeerId;
+        activeCallId = signal.callId;
+        callRole = 'callee';
+        // Let the caller know we're ringing.
+        sendSignal(fromPeerId, { type: 'ringing', callId: signal.callId }).catch(() => {});
+        showIncomingCall({
+          name: signal.callerName || 'WebDeck Device',
+          number: signal.callerNumber || '',
+          transport: 'wifi',
+          callId: signal.callId,
+          isVideo: signal.isVideo === true,
+          peerId: fromPeerId,
+        });
+        clearTimeout(ringTimeout);
+        ringTimeout = setTimeout(() => {
+          if (incomingCallData && incomingCallData.callId === signal.callId) {
+            addRecentCall({ name: incomingCallData.name, number: incomingCallData.number, type: 'missed', isVideo: incomingCallData.isVideo, transport: 'wifi' });
+            closeIncomingModal();
+            incomingCallData = null;
+            activeCallPeerId = null;
+            activeCallId = null;
+          }
+        }, RING_TIMEOUT_MS);
+        break;
+      }
+      case 'ringing':
+        if (sameCall && inCall && callRole === 'caller') {
+          $('callDuration').textContent = 'Ringing…';
+        }
+        break;
+      case 'answer': {
+        // Callee accepted: caller creates the WebRTC offer.
+        if (!sameCall || !inCall || callRole !== 'caller') return;
+        clearTimeout(ringTimeout);
         stopRingback();
-        $('callWithText').textContent = signal.calleeName || 'Connected';
-        $('callDuration').textContent = '00:00';
-        startCallTimer();
-        startVisualizer();
-        if (wd && wd.ui) wd.ui.toast(`Call connected!`, 'ok');
+        $('callWithText').textContent = signal.calleeName || $('callWithText').textContent;
+        $('callDuration').textContent = 'Connecting audio…';
+        try {
+          await getLocalMedia(callIsVideo);
+          const conn = createPeerConnection(fromPeerId);
+          const offer = await conn.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+          await conn.setLocalDescription(offer);
+          await sendSignal(fromPeerId, { type: 'offer', callId: activeCallId, sdp: conn.localDescription.sdp });
+        } catch (e) {
+          endCall(`Could not start media: ${e.message || e}`);
+        }
+        break;
       }
-    } else if (signal.type === 'hangup') {
-      if (incomingCallData && incomingCallData.callId === signal.callId) {
-        closeIncomingModal();
-        if (wd && wd.ui) wd.ui.toast('Caller hung up', 'ok');
-      } else if (inCall && (!activeCallId || activeCallId === signal.callId)) {
-        endCallLocal(signal.reason === 'busy' ? 'Device is busy' : 'Call ended by remote device');
+      case 'offer': {
+        if (!sameCall || !inCall || callRole !== 'callee') return;
+        try {
+          const conn = createPeerConnection(fromPeerId);
+          await conn.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
+          await flushCandidates();
+          const answer = await conn.createAnswer();
+          await conn.setLocalDescription(answer);
+          await sendSignal(fromPeerId, { type: 'sdp-answer', callId: activeCallId, sdp: conn.localDescription.sdp });
+        } catch (e) {
+          endCall(`Could not connect media: ${e.message || e}`);
+        }
+        break;
+      }
+      case 'sdp-answer':
+        if (!sameCall || !pc) return;
+        try {
+          await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
+          await flushCandidates();
+        } catch (_) {}
+        break;
+      case 'ice':
+        if (!sameCall || !signal.candidate) return;
+        if (pc && pc.remoteDescription) {
+          try { await pc.addIceCandidate(signal.candidate); } catch (_) {}
+        } else {
+          pendingRemoteCandidates.push(signal.candidate);
+        }
+        break;
+      case 'hangup': {
+        if (incomingCallData && incomingCallData.callId === signal.callId) {
+          clearTimeout(ringTimeout);
+          addRecentCall({ name: incomingCallData.name, number: incomingCallData.number, type: 'missed', isVideo: incomingCallData.isVideo, transport: 'wifi' });
+          closeIncomingModal();
+          incomingCallData = null;
+          activeCallPeerId = null;
+          activeCallId = null;
+          wd.ui.toast('Caller hung up', 'ok');
+        } else if (inCall && sameCall) {
+          const reason = signal.reason === 'busy' ? 'Device is busy'
+            : signal.reason === 'declined' ? 'Call declined'
+            : signal.reason === 'no-answer' ? 'No answer'
+            : 'Call ended by remote device';
+          endCallLocal(reason);
+        }
+        break;
       }
     }
   }
 
-  // --- Real Outgoing Call ---
+  // --- Outgoing call ---
   async function initiateCall(numberOrName, isVideo = false, specificPeerId = null) {
     if (inCall) return;
     const target = numberOrName || dialInputString;
-    if (!target) {
+    if (!target && !specificPeerId) {
       wd.ui.toast('Enter or select a number to call', 'err');
       return;
     }
 
-    if (myProfile && cleanNumber(target) === cleanNumber(myProfile.number)) {
-      wd.ui.toast('Cannot call your own number. Dial your other device or click Ring Me.', 'err');
+    if (myProfile && target && cleanNumber(target) === cleanNumber(myProfile.number)) {
+      wd.ui.toast('That is your own number. Dial the number shown on your other device.', 'err');
       return;
     }
 
-    // Find peer
     const dir = await getDirectory();
-    let peer = null;
-    if (specificPeerId) {
-      peer = dir.find(c => c.peerId === specificPeerId);
-    }
-    if (!peer) {
-      peer = dir.find(c => cleanNumber(c.number) === cleanNumber(target) || c.name.toLowerCase() === target.toLowerCase());
+    let peer = specificPeerId ? dir.find((c) => c.peerId === specificPeerId) : null;
+    if (!peer && target) {
+      peer = dir.find((c) => (cleanNumber(target) && cleanNumber(c.number) === cleanNumber(target)) || c.name.toLowerCase() === String(target).toLowerCase());
     }
 
-    const displayName = peer ? peer.name : target;
-    const displayNumber = peer ? peer.number : target;
-    activeCallPeerId = peer ? peer.peerId : null;
-    activeCallId = 'call-' + Date.now();
+    const lanOk = peer && peer.peerId && peer.paired && peer.online !== false;
+    if (!lanOk) {
+      // Not reachable on this Wi-Fi: look the number up over the internet.
+      const number = peer ? peer.number : target;
+      let found = null;
+      if (cloudOk && cleanNumber(number)) {
+        try { found = await wd.cloud.lookup(number); } catch (_) {}
+      }
+      if (found) {
+        if (!found.online) wd.ui.toast(`${found.name} looks offline; ringing anyway…`, 'ok');
+        peer = { peerId: 'cloud:' + found.user_id, name: found.name, number: found.number, paired: true };
+      } else if (peer && peer.peerId && peer.paired) {
+        // Paired but not seen recently on Wi-Fi: still try Device Link.
+      } else {
+        wd.ui.toast(cloudOk
+          ? 'No WebDeck user has that number.'
+          : 'No paired device has that number, and internet calling is offline.', 'err');
+        return;
+      }
+    }
 
+    // Ask for the mic first so the permission prompt happens before ringing.
+    try {
+      await getLocalMedia(isVideo);
+    } catch (e) {
+      wd.ui.toast(`Microphone permission is needed to call: ${e.message || e}`, 'err');
+      return;
+    }
+
+    activeCallPeerId = peer.peerId;
+    activeCallId = 'call-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    callIsVideo = isVideo;
+    callRole = 'caller';
     inCall = true;
-    $('callStageView').hidden = false;
-    $('callStageView').style.display = 'block';
-    $('tabContentMain').hidden = true;
-    $('tabContentMain').style.display = 'none';
-    $('tabContentRecents').hidden = true;
-    $('tabContentRecents').style.display = 'none';
-    $('tabContentSettings').hidden = true;
-    $('tabContentSettings').style.display = 'none';
+    showCallStage();
 
     $('callOverlayText').hidden = false;
-    $('callWithText').textContent = `Calling ${displayName}…`;
-    $('callWithNumber').textContent = displayNumber;
-    $('callDuration').textContent = 'Connecting via Wi-Fi P2P Device Link…';
-    $('callHudTransport').textContent = 'Local Wi-Fi P2P';
+    $('callWithText').textContent = `Calling ${peer.name}…`;
+    $('callWithNumber').textContent = peer.number;
+    $('callDuration').textContent = 'Connecting…';
+    $('callHudTransport').textContent = transportLabel(peer.peerId);
 
     startRingback();
+    addRecentCall({ name: peer.name, number: peer.number, type: 'outgoing', isVideo, transport: viaOf(peer.peerId) });
 
-    // Start local media
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo }).then(stream => {
-        localStream = stream;
-        $('localVideo').srcObject = localStream;
-        $('localPip').hidden = !isVideo;
-        $('localPip').style.display = isVideo ? 'block' : 'none';
-      }).catch(() => {
-        $('localPip').hidden = true;
-        $('localPip').style.display = 'none';
+    try {
+      await sendSignal(activeCallPeerId, {
+        type: 'invite',
+        callId: activeCallId,
+        callerName: myProfile.name,
+        callerNumber: myProfile.number,
+        isVideo,
       });
+    } catch (err) {
+      endCallLocal(`Could not reach ${peer.name}: ${err.message || err}`);
+      return;
     }
 
-    // Send real call invite over Device Link if peer exists
-    if (activeCallPeerId && wd && wd.link) {
-      try {
-        await wd.link.send(activeCallPeerId, 'call_signal', {
-          type: 'invite',
-          callId: activeCallId,
-          callerName: myProfile.name,
-          callerNumber: myProfile.number,
-          isVideo: isVideo
-        });
-        wd.ui.toast(`Calling ${displayName} over Device Link…`, 'ok');
-      } catch (err) {
-        wd.ui.toast(`Could not reach ${displayName}: ${err.message}`, 'err');
-      }
-    } else {
-      // Offline / standalone simulator fallback after 2.5s
-      setTimeout(() => {
-        if (!inCall) return;
-        stopRingback();
-        $('callWithText').textContent = displayName;
-        $('callDuration').textContent = '00:00';
-        startCallTimer();
-        startVisualizer();
-        addRecentCall({
-          name: displayName,
-          number: displayNumber,
-          type: 'outgoing',
-          isVideo,
-          transport: activeTransport
-        });
-        if (wd && wd.ui) wd.ui.toast(`Connected with ${displayName}`, 'ok');
-      }, 2500);
+    clearTimeout(ringTimeout);
+    const callId = activeCallId;
+    ringTimeout = setTimeout(() => {
+      if (inCall && activeCallId === callId && !callTimer) endCall('No answer', 'no-answer');
+    }, RING_TIMEOUT_MS);
+  }
+
+  function showCallStage() {
+    $('callStageView').hidden = false;
+    $('callStageView').style.display = 'block';
+    for (const id of ['tabContentMain', 'tabContentRecents', 'tabContentSettings']) {
+      $(id).hidden = true;
+      $(id).style.display = 'none';
     }
   }
 
@@ -544,21 +814,20 @@
     }, 1000);
   }
 
-  function endCall() {
-    // Send hangup to peer if active
+  function endCall(msg = 'Call ended', reason) {
     if (activeCallPeerId && wd && wd.link && activeCallId) {
-      try {
-        wd.link.send(activeCallPeerId, 'call_signal', { type: 'hangup', callId: activeCallId });
-      } catch (_) {}
+      sendSignal(activeCallPeerId, { type: 'hangup', callId: activeCallId, reason }).catch(() => {});
     }
-    endCallLocal('Call ended');
+    endCallLocal(typeof msg === 'string' ? msg : 'Call ended');
   }
 
   function endCallLocal(msg) {
+    clearTimeout(ringTimeout);
     stopRingback();
     stopRingtone();
+    closePeerConnection();
     if (localStream) {
-      localStream.getTracks().forEach(t => t.stop());
+      localStream.getTracks().forEach((t) => t.stop());
       localStream = null;
     }
     if (callTimer) {
@@ -568,6 +837,7 @@
     stopVisualizer();
 
     inCall = false;
+    callRole = null;
     activeCallPeerId = null;
     activeCallId = null;
     $('callStageView').hidden = true;
@@ -586,8 +856,8 @@
   function showIncomingCall(data) {
     incomingCallData = data;
     $('incomingCallerName').textContent = data.name || 'Incoming Caller';
-    $('incomingCallerNumber').textContent = data.number || '+1 (555) 492-1829';
-    $('incomingTransportBadge').textContent = `📶 Incoming Wi-Fi P2P Call`;
+    $('incomingCallerNumber').textContent = data.number || '';
+    $('incomingTransportBadge').textContent = data.selfTest ? '🧪 Self-test (local only)' : `${viaOf(data.peerId) === 'cloud' ? '🌐' : '📶'} Incoming ${data.isVideo ? 'video' : 'voice'} call · ${transportLabel(data.peerId)}`;
 
     const modal = $('incomingCallModal');
     modal.hidden = false;
@@ -597,8 +867,8 @@
     startRingtone();
 
     try {
-      if (wd && wd.notify) {
-        wd.notify(`Incoming Call: ${data.name}`, `Tap to answer call to ${myProfile ? myProfile.number : ''}`);
+      if (wd && wd.notify && !data.selfTest) {
+        wd.notify(`Incoming call: ${data.name}`, `${data.isVideo ? 'Video' : 'Voice'} call to ${myProfile ? myProfile.number : ''}`);
       }
     } catch (_) {}
   }
@@ -611,83 +881,70 @@
     modal.style.display = 'none';
   }
 
-  function acceptIncomingCall(isVideo) {
+  async function acceptIncomingCall(isVideo) {
+    clearTimeout(ringTimeout);
     closeIncomingModal();
-    const data = incomingCallData || {
-      name: $('incomingCallerName').textContent || 'Jane Doe',
-      number: $('incomingCallerNumber').textContent || '+1 (555) 492-1829',
-      transport: 'wifi'
-    };
+    const data = incomingCallData;
     incomingCallData = null;
+    if (!data) return;
+
+    if (data.selfTest) {
+      wd.ui.toast('Ringtone works. Call from your other device to test a real call.', 'ok');
+      return;
+    }
+
+    try {
+      await getLocalMedia(isVideo);
+    } catch (e) {
+      sendSignal(data.peerId, { type: 'hangup', callId: data.callId, reason: 'declined' }).catch(() => {});
+      activeCallPeerId = null;
+      activeCallId = null;
+      wd.ui.toast(`Microphone permission is needed to answer: ${e.message || e}`, 'err');
+      return;
+    }
 
     inCall = true;
-    $('callStageView').hidden = false;
-    $('callStageView').style.display = 'block';
-    $('tabContentMain').hidden = true;
-    $('tabContentMain').style.display = 'none';
-    $('tabContentRecents').hidden = true;
-    $('tabContentRecents').style.display = 'none';
-    $('tabContentSettings').hidden = true;
-    $('tabContentSettings').style.display = 'none';
+    callRole = 'callee';
+    callIsVideo = isVideo;
+    activeCallPeerId = data.peerId;
+    activeCallId = data.callId;
+    showCallStage();
 
     $('callOverlayText').hidden = false;
     $('callWithText').textContent = data.name;
     $('callWithNumber').textContent = data.number;
-    $('callHudTransport').textContent = 'Local Wi-Fi P2P';
+    $('callDuration').textContent = 'Connecting audio…';
+    $('callHudTransport').textContent = transportLabel(data.peerId);
 
-    startCallTimer();
-    startVisualizer();
+    addRecentCall({ name: data.name, number: data.number, type: 'incoming', isVideo, transport: 'wifi' });
 
-    addRecentCall({
-      name: data.name,
-      number: data.number,
-      type: 'incoming',
-      isVideo,
-      transport: 'wifi'
-    });
-
-    // Notify caller that we answered!
-    if (activeCallPeerId && wd && wd.link && activeCallId) {
-      try {
-        wd.link.send(activeCallPeerId, 'call_signal', {
-          type: 'answer',
-          callId: activeCallId,
-          calleeName: myProfile.name,
-          calleeNumber: myProfile.number,
-          isVideo
-        });
-      } catch (_) {}
-    }
-
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo }).then(stream => {
-        localStream = stream;
-        $('localVideo').srcObject = localStream;
-        $('localPip').hidden = !isVideo;
-        $('localPip').style.display = isVideo ? 'block' : 'none';
-      }).catch(() => {
-        $('localPip').hidden = true;
-        $('localPip').style.display = 'none';
+    try {
+      await sendSignal(activeCallPeerId, {
+        type: 'answer',
+        callId: activeCallId,
+        calleeName: myProfile.name,
+        calleeNumber: myProfile.number,
+        isVideo,
       });
+    } catch (e) {
+      endCallLocal(`Could not reach caller: ${e.message || e}`);
+      return;
     }
+    // Wait for the offer; give up if media never connects.
+    const callId = activeCallId;
+    ringTimeout = setTimeout(() => {
+      if (inCall && activeCallId === callId && !callTimer) endCall('Could not connect audio');
+    }, 30000);
   }
 
   function declineIncomingCall() {
+    clearTimeout(ringTimeout);
     closeIncomingModal();
-    if (activeCallPeerId && wd && wd.link && activeCallId) {
-      try {
-        wd.link.send(activeCallPeerId, 'call_signal', { type: 'hangup', callId: activeCallId, reason: 'declined' });
-      } catch (_) {}
-    }
-    if (incomingCallData) {
-      addRecentCall({
-        name: incomingCallData.name,
-        number: incomingCallData.number,
-        type: 'missed',
-        isVideo: false,
-        transport: 'wifi'
-      });
-      incomingCallData = null;
+    const data = incomingCallData;
+    incomingCallData = null;
+    if (data && !data.selfTest) {
+      sendSignal(data.peerId, { type: 'hangup', callId: data.callId, reason: 'declined' }).catch(() => {});
+      addRecentCall({ name: data.name, number: data.number, type: 'missed', isVideo: data.isVideo, transport: 'wifi' });
     }
     activeCallPeerId = null;
     activeCallId = null;
@@ -719,6 +976,7 @@
   function toggleSpeaker() {
     speakerOn = !speakerOn;
     $('btnToggleSpeaker').textContent = speakerOn ? '🔊' : '🔈';
+    $('remoteVideo').volume = speakerOn ? 1 : 0.35;
     wd.ui.toast(speakerOn ? 'Speaker output enabled' : 'Earpiece output enabled', 'ok');
   }
 
@@ -843,12 +1101,15 @@
       updatedAt: new Date().toISOString()
     };
 
+    await persistProfile();
     try {
-      if (wd && wd.kv) await wd.kv.set('caller_profile', myProfile);
-    } catch (_) {}
-    localStorage.setItem('wd_caller_profile', JSON.stringify(myProfile));
+      await registerCloudProfile(true);
+    } catch (e) {
+      wd.ui.toast(e.code === 'number_taken' ? 'That number was just taken by someone else.' : `Saved locally; internet registration failed: ${e.message}`, 'err');
+    }
 
     updateProfilePill();
+    broadcastPresence(true);
     closeEditModal();
     if (wd && wd.ui) wd.ui.toast(`Caller ID updated: ${number}`, 'ok');
     renderDirectory();
@@ -862,12 +1123,11 @@
     myProfile.number = rand;
     myProfile.updatedAt = new Date().toISOString();
 
-    try {
-      if (wd && wd.kv) await wd.kv.set('caller_profile', myProfile);
-    } catch (_) {}
-    localStorage.setItem('wd_caller_profile', JSON.stringify(myProfile));
+    await persistProfile();
+    registerCloudProfile();
 
     updateProfilePill();
+    broadcastPresence(true);
     playDtmf('5');
     if (wd && wd.ui) wd.ui.toast(`Assigned random number: ${rand}`, 'ok');
     renderDirectory();
@@ -1004,11 +1264,13 @@
     });
 
     $('btnSimulateIncoming').onclick = () => {
+      if (inCall || incomingCallData) return;
       showIncomingCall({
         name: 'Device Self-Test',
-        number: myProfile ? myProfile.number : '+1 (555) 000-0000',
+        number: myProfile ? myProfile.number : '',
         transport: 'wifi',
-        isVideo: Math.random() > 0.5
+        isVideo: false,
+        selfTest: true
       });
     };
 
@@ -1028,7 +1290,7 @@
     $('btnDialVoice').onclick = () => initiateCall(dialInputString, false);
     $('btnDialVideo').onclick = () => initiateCall(dialInputString, true);
 
-    $('btnEndCall').onclick = endCall;
+    $('btnEndCall').onclick = () => endCall('Call ended');
     $('btnToggleMic').onclick = toggleMic;
     $('btnToggleCam').onclick = toggleCam;
     $('btnToggleSpeaker').onclick = toggleSpeaker;
@@ -1122,8 +1384,12 @@
     await renderDirectory();
     await renderRecents();
 
-    // Start real Device Link polling loop every 750ms
-    setInterval(pollDeviceLink, 750);
+    // Device Link signaling loop (polls never overlap).
+    broadcastPresence(true);
+    registerCloudProfile();
+    pollDeviceLink();
+    setInterval(() => { pollDeviceLink(); pollCloud(); }, 600);
+    setInterval(() => { if (!cloudOk) registerCloudProfile(); }, 20000);
   }
 
   init();

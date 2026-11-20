@@ -15,6 +15,7 @@ import 'package:shelf/shelf.dart';
 import '../data/models/installed_app.dart';
 import 'app_data_store.dart';
 import 'job_scheduler.dart';
+import 'cloud_service.dart';
 import 'link_service.dart';
 import 'manifest.dart';
 import 'notification_service.dart';
@@ -53,6 +54,7 @@ class RuntimeHost {
 
   /// Device Link (LAN pairing, files, messages, clipboard); null when unavailable.
   LinkService? link;
+  CloudService? cloud;
 
   /// Hooks into the Flutter UI; replaced by the app at startup.
   ConfirmPrompt confirm = (_, _) async => false;
@@ -380,6 +382,11 @@ class RuntimeHost {
         if (task == null || task.appId != app.id) throw const RuntimeError('not_found', 'Unknown task', 404);
         return tools.cancel(task.id);
 
+      // ---- WebDeck Cloud (internet signaling between users)
+      case String m when m.startsWith('cloud.'):
+        _require(manifest, RuntimePermission.link);
+        return _cloudCall(app, m, params);
+
       // ---- Device Link
       case String m when m.startsWith('link.'):
         _require(manifest, RuntimePermission.link);
@@ -409,6 +416,53 @@ class RuntimeHost {
         _require(manifest, RuntimePermission.jobs);
         jobs.log(app.id, str('runId'), params['message']?.toString() ?? '');
         return true;
+    }
+    throw RuntimeError('not_found', 'Unknown method "$method"', 404);
+  }
+
+  // ------------------------------------------------------------------ cloud
+
+  Future<Object?> _cloudCall(InstalledApp app, String method, Map<String, dynamic> params) async {
+    final c = cloud;
+    if (c == null) throw const RuntimeError('unsupported', 'WebDeck Cloud is not available');
+    String str(String k) {
+      final v = params[k];
+      if (v is! String || v.isEmpty) throw RuntimeError('bad_request', '"$k" is required');
+      return v;
+    }
+
+    try {
+      if (method != 'cloud.status') await c.start();
+      switch (method) {
+        case 'cloud.status':
+          unawaited(c.start());
+          return c.status();
+        case 'cloud.connect':
+          return c.status();
+        case 'cloud.available':
+          return await c.numberAvailable(str('number'));
+        case 'cloud.setProfile':
+          return await c.setProfile(name: params['name'] as String? ?? '', number: str('number'));
+        case 'cloud.lookup':
+          return await c.lookup(str('number'));
+        case 'cloud.send':
+          final payload = (params['payload'] as Map?)?.cast<String, dynamic>() ?? {};
+          if (jsonEncode(payload).length > 60 * 1024) throw const RuntimeError('too_large', 'Message is too large');
+          await c.send(toUser: str('to'), app: app.id, channel: str('channel'), payload: payload);
+          return true;
+        case 'cloud.inbox':
+          final since = (params['since'] as num?)?.toInt();
+          return c
+              .inbox(
+                app: app.id,
+                channel: params['channel'] as String?,
+                since: since == null ? null : DateTime.fromMillisecondsSinceEpoch(since),
+              )
+              .map((m) => m.toJson())
+              .toList();
+      }
+    } on CloudException catch (e) {
+      throw RuntimeError(e.code, e.message, 409);
     }
     throw RuntimeError('not_found', 'Unknown method "$method"', 404);
   }

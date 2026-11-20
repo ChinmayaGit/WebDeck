@@ -123,6 +123,25 @@ await webdeck.link.clipboard.share('text');
 
 Received files land in `~/Downloads/WebDeck/Received`.
 
+### WebDeck Cloud: `link`
+
+Reach other WebDeck users over the internet. Each device has an anonymous account and a unique
+number; users can be looked up by exact number only (there is no directory).
+
+```js
+const st = await webdeck.cloud.connect();           // { connected, userId, profile, error }
+if (await webdeck.cloud.available('+1 (555) 123-4567')) {
+  await webdeck.cloud.setProfile({ name: 'Alex', number: '+1 (555) 123-4567' }); // error code 'number_taken'
+}
+const peer = await webdeck.cloud.lookup('+1 555 987 6543');   // { user_id, name, number, platform, online } or null
+await webdeck.cloud.send(peer.user_id, 'myapp:chat', { text: 'hi' });  // ≤ 60 KB JSON
+const msgs = await webdeck.cloud.inbox({ channel: 'myapp:chat', since: Date.now() - 60000 });
+// [{ id, from, channel, payload, at }]: only messages sent to this extension
+```
+
+Messages are relayed, not stored: keep anything you need with `webdeck.db`. For calls or large
+transfers, use `cloud.send` only to set up a WebRTC connection between the two devices.
+
 ### Notifications: `notify`
 
 ```js
