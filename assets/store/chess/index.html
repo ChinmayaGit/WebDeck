@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chess</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .layout { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+    .board-wrap { --sq: min(11vw, 58px); }
+    .board { display: grid; grid-template-columns: repeat(8, var(--sq)); grid-template-rows: repeat(8, var(--sq));
+      border-radius: 10px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.45); user-select: none; touch-action: manipulation; }
+    .sq { position: relative; display: grid; place-items: center; cursor: pointer; font-size: calc(var(--sq) * .78); line-height: 1; }
+    .sq.light { background: #EEEED2; } .sq.dark { background: #769656; }
+    .sq.last.light { background: #F6F669; } .sq.last.dark { background: #BACA2B; }
+    .sq.sel { box-shadow: inset 0 0 0 4px #FBBF24; }
+    .sq.check { background: radial-gradient(circle, #EF4444 0%, #B91C1C 60%, transparent 85%) !important; }
+    .sq.move::after { content: ''; width: 28%; height: 28%; border-radius: 50%; background: rgba(0,0,0,.22); }
+    .sq.capture::after { content: ''; position: absolute; inset: 4%; border-radius: 50%; border: 5px solid rgba(0,0,0,.22); }
+    .pc.w { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 3px rgba(0,0,0,.6); }
+    .pc.b { color: #111; text-shadow: 0 1px 1px rgba(255,255,255,.35); }
+    .coord { position: absolute; font-size: 10px; font-weight: 700; opacity: .7; }
+    .coord.f { right: 3px; bottom: 1px; } .coord.r { left: 3px; top: 1px; }
+    .sq.light .coord { color: #769656; } .sq.dark .coord { color: #EEEED2; }
+    .panel { width: min(100%, 300px); display: flex; flex-direction: column; gap: 10px; }
+    .status { font-weight: 700; font-size: 16px; }
+    .captured { min-height: 22px; font-size: 20px; letter-spacing: -2px; }
+    .moves { max-height: 260px; overflow: auto; font-family: ui-monospace, monospace; font-size: 13px; display: grid; grid-template-columns: 32px 1fr 1fr; gap: 2px 8px; }
+    .moves .n { color: var(--wd-muted); }
+    .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .thinking { color: var(--wd-muted); font-size: 12px; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:920px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#8B5CF6;color:#fff">♞</div>
+      <div><h1>Chess</h1><div class="wd-sub">Play the computer or a friend on this device</div></div>
+    </div>
+    <div class="layout">
+      <div class="board-wrap"><div class="board" id="board"></div></div>
+      <div class="panel">
+        <div class="wd-card">
+          <div class="status" id="status">White to move</div>
+          <div class="thinking" id="thinking"></div>
+          <div class="captured" id="capB" title="Captured by Black"></div>
+          <div class="captured" id="capW" title="Captured by White"></div>
+        </div>
+        <div class="wd-card">
+          <div class="opts">
+            <select class="wd-select" id="mode"><option value="pve">vs Computer</option><option value="pvp">2 players</option></select>
+            <select class="wd-select" id="level"><option value="1">Easy</option><option value="3" selected>Medium</option><option value="4">Hard</option></select>
+            <select class="wd-select" id="side"><option value="w">Play White</option><option value="b">Play Black</option></select>
+            <button class="wd-btn" id="flip">Flip board</button>
+            <button class="wd-btn" id="undo">Undo</button>
+            <button class="wd-btn wd-btn-primary" id="newGame">New game</button>
+          </div>
+        </div>
+        <div class="wd-card"><b>Moves</b><div class="moves" id="moves" style="margin-top:6px"></div></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

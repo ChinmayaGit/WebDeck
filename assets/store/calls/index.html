@@ -389,6 +389,10 @@
       70% { transform: scale(1.05); box-shadow: 0 0 0 24px rgba(16,185,129,0); }
       100% { transform: scale(.95); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
     }
+    .relay-banner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin-bottom: 14px;
+      border-radius: 12px; background: rgba(245, 158, 11, .12); border: 1px solid rgba(245, 158, 11, .45); }
+    .relay-banner[hidden] { display: none; }
+    .transport-chip.soon { opacity: .45; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -402,7 +406,7 @@
           Voice & Video Calls
           <span class="wd-badge" id="callerBadge" style="background:rgba(22,163,74,.2);color:#10B981;font-weight:700">P2P Ready</span>
         </h1>
-        <div class="wd-sub">Direct Cross-Device Calling: Wi-Fi P2P · Internet WebRTC · Bluetooth · Mesh</div>
+        <div class="wd-sub">Call by number over the internet, or directly on the same Wi-Fi</div>
       </div>
       <div class="wd-spacer"></div>
 
@@ -417,6 +421,21 @@
       </div>
     </div>
 
+    <!-- Service notice -->
+    <div class="relay-banner" id="relayBanner" hidden>
+      <div style="font-size:22px">⚠️</div>
+      <div style="flex:1">
+        <div style="font-weight:700">Internet calling is limited right now</div>
+        <div class="wd-small" style="margin-top:2px;line-height:1.45">
+          Our internet call relay isn't available yet; a free one is coming soon.
+          Calls between some networks (for example mobile data) may connect without audio until then.
+          <b>Calls on the same Wi-Fi work fully.</b> Bluetooth and radio-module calling (with a sender and
+          receiver chip) are coming soon.
+        </div>
+      </div>
+      <button class="wd-btn wd-btn-sm wd-btn-ghost" id="btnDismissBanner" title="Hide for 7 days">✕</button>
+    </div>
+
     <!-- Device Link Connection & Pairing Widget -->
     <div id="linkSetup" style="margin-bottom:16px"></div>
 
@@ -426,8 +445,8 @@
       <div class="transport-chip active" data-transport="auto">⚡ Auto-Mesh (Optimal)</div>
       <div class="transport-chip" data-transport="wifi">📶 Local Wi-Fi (Device Link)</div>
       <div class="transport-chip" data-transport="internet">🌐 Internet (WebRTC P2P)</div>
-      <div class="transport-chip" data-transport="bluetooth">ᛒ Bluetooth (BLE Direct)</div>
-      <div class="transport-chip" data-transport="radiowave">📡 Radiowave (RF Mesh)</div>
+      <div class="transport-chip soon" data-transport="bluetooth" title="Coming soon">ᛒ Bluetooth · soon</div>
+      <div class="transport-chip soon" data-transport="radiowave" title="Coming soon: needs a radio sender/receiver module">📡 Radio module · soon</div>
       <div class="wd-spacer"></div>
       <button class="wd-btn wd-btn-sm" id="btnSimulateIncoming" title="Simulate an incoming call test">🧪 Ring Me (Self-Test)</button>
     </div>

@@ -1,0 +1,12 @@
+{
+  "id": "network-monitor",
+  "name": "Network Monitor",
+  "version": "1.0.0",
+  "description": "See this device's network, every WebDeck device connected on your Wi-Fi, internet and cloud status, live latency and a quick download speed test.",
+  "category": "Network",
+  "icon": "network",
+  "color": "#0EA5E9",
+  "entry": "index.html",
+  "permissions": ["link", "net"],
+  "author": "WebDeck"
+}

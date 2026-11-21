@@ -6,12 +6,16 @@ import '../../../../data/models/installed_app.dart';
 import '../../../../data/repositories/app_repository.dart';
 import '../../../../data/services/demo_apps_factory.dart';
 import '../../../../data/services/local_server_service.dart';
+import '../../../../runtime/settings_service.dart';
 
 enum ViewMode {
   grid,
   list,
   iconOnly,
 }
+
+/// Home filter shown in the app bar.
+enum HomeFilter { all, running, extensions, webApps, shortcuts }
 
 enum AppSortOption {
   nameAsc,
@@ -23,6 +27,7 @@ enum AppSortOption {
 
 class CatalogViewModel extends ChangeNotifier {
   final AppRepository _repository;
+  final SettingsService? _settings;
 
   List<InstalledApp> _apps = [];
   bool _isLoading = false;
@@ -36,10 +41,35 @@ class CatalogViewModel extends ChangeNotifier {
   AppSortOption _sortOption = AppSortOption.dateNewest;
   String? _selectedFramework;
   bool _onlyRunning = false;
+  HomeFilter _filter = HomeFilter.all;
 
-  CatalogViewModel(this._repository) {
+  CatalogViewModel(this._repository, {this._settings}) {
+    final s = _settings;
+    if (s != null) {
+      _viewMode = ViewMode.values.asNameMap()[s.ui<String>('home.view')] ?? _viewMode;
+      _sortOption = AppSortOption.values.asNameMap()[s.ui<String>('home.sort')] ?? _sortOption;
+      _filter = HomeFilter.values.asNameMap()[s.ui<String>('home.filter')] ?? _filter;
+      _onlyRunning = _filter == HomeFilter.running;
+    }
     loadApps();
   }
+
+  HomeFilter get filter => _filter;
+
+  void setFilter(HomeFilter f) {
+    _filter = f;
+    _onlyRunning = f == HomeFilter.running;
+    _settings?.setUi('home.filter', f.name);
+    notifyListeners();
+  }
+
+  int countFor(HomeFilter f) => switch (f) {
+        HomeFilter.all => _apps.length,
+        HomeFilter.running => runningCount,
+        HomeFilter.extensions => _apps.where((a) => a.kind == AppKind.extension).length,
+        HomeFilter.webApps => _apps.where((a) => a.kind == AppKind.webApp).length,
+        HomeFilter.shortcuts => _apps.where((a) => a.kind == AppKind.shortcut).length,
+      };
 
   List<InstalledApp> get apps => _apps;
   bool get isLoading => _isLoading;
@@ -73,9 +103,18 @@ class CatalogViewModel extends ChangeNotifier {
       result = result.where((app) => app.framework == _selectedFramework).toList();
     }
 
-    // 3. Only Running Filter
-    if (_onlyRunning) {
-      result = result.where((app) => isAppRunning(app.id)).toList();
+    // 3. Type / running filter
+    switch (_filter) {
+      case HomeFilter.all:
+        break;
+      case HomeFilter.running:
+        result = result.where((app) => isAppRunning(app.id)).toList();
+      case HomeFilter.extensions:
+        result = result.where((app) => app.kind == AppKind.extension).toList();
+      case HomeFilter.webApps:
+        result = result.where((app) => app.kind == AppKind.webApp).toList();
+      case HomeFilter.shortcuts:
+        result = result.where((app) => app.kind == AppKind.shortcut).toList();
     }
 
     // 4. Sorting
@@ -122,11 +161,13 @@ class CatalogViewModel extends ChangeNotifier {
 
   void setViewMode(ViewMode mode) {
     _viewMode = mode;
+    _settings?.setUi('home.view', mode.name);
     notifyListeners();
   }
 
   void setSortOption(AppSortOption option) {
     _sortOption = option;
+    _settings?.setUi('home.sort', option.name);
     notifyListeners();
   }
 
@@ -137,6 +178,8 @@ class CatalogViewModel extends ChangeNotifier {
 
   void toggleOnlyRunning() {
     _onlyRunning = !_onlyRunning;
+    _filter = _onlyRunning ? HomeFilter.running : HomeFilter.all;
+    _settings?.setUi('home.filter', _filter.name);
     notifyListeners();
   }
 
@@ -350,6 +393,12 @@ class CatalogViewModel extends ChangeNotifier {
       _isInstalling = false;
       notifyListeners();
     }
+  }
+
+  Future<InstalledApp> addWebShortcut({required String name, required String url, required List<int> fallbackIconPng}) async {
+    final app = await _repository.addWebShortcut(name: name, url: url, fallbackIconPng: fallbackIconPng);
+    await loadApps();
+    return app;
   }
 
   Future<RunningAppInstance> launchApp(InstalledApp app) async {

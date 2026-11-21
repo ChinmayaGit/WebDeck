@@ -1,0 +1,11 @@
+{
+  "id": "tic-tac-toe",
+  "name": "Tic-Tac-Toe",
+  "version": "1.0.0",
+  "description": "Classic noughts and crosses against an unbeatable AI, a casual AI, or a friend on the same device. Scores are saved.",
+  "category": "Games",
+  "icon": "game",
+  "color": "#388BFD",
+  "permissions": [],
+  "author": "WebDeck"
+}

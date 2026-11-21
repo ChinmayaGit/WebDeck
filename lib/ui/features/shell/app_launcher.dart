@@ -5,8 +5,16 @@ import '../../core/theme.dart';
 import '../catalog/view_models/catalog_view_model.dart';
 import '../player/views/webview_player_screen.dart';
 
+/// Opens a web shortcut directly in the browser view (no local server).
+Future<void> openWebShortcut(BuildContext context, InstalledApp app) {
+  return Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => WebViewPlayerScreen(app: app, launchUrl: app.repoUrl, port: 0)),
+  );
+}
+
 /// Opens a runtime app (no backend checks needed: WebDeck is its backend).
 Future<void> openRuntimeApp(BuildContext context, CatalogViewModel viewModel, InstalledApp app) async {
+  if (app.isWebShortcut) return openWebShortcut(context, app);
   try {
     final instance = await viewModel.launchApp(app);
     if (!context.mounted) return;

@@ -1,11 +1,13 @@
 {
   "id": "messages",
-  "name": "Messages",
-  "version": "1.0.0",
+  "name": "Device Chat",
+  "version": "1.0.1",
   "description": "Chat between your own devices over Wi-Fi, e.g. send a link or note from your phone to your laptop. Messages go directly device-to-device with Device Link and never touch a server.",
   "category": "Network",
   "icon": "chat",
   "color": "#16A34A",
-  "permissions": ["link"],
+  "permissions": [
+    "link"
+  ],
   "author": "WebDeck"
 }

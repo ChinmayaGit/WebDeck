@@ -2,6 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Unlock apps such as Password Vault with Face ID or Touch ID.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WebDeck apps use the microphone for voice and video calls.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>WebDeck apps use the camera for video calls and scanning.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.webdeck.open</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>webdeck</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>WebDeck uses your local network to find and connect to your other devices for file sharing, messages and clipboard sync.</string>
 	<key>NSBonjourServices</key>

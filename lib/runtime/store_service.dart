@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import '../data/models/installed_app.dart';
 import '../data/repositories/app_repository.dart';
 import 'app_icons.dart';
+import 'cloud_service.dart';
 import 'manifest.dart';
 import 'settings_service.dart';
 
@@ -25,6 +26,9 @@ class StoreEntry {
 
   /// Zip download for apps from remote catalogs.
   final String? downloadUrl;
+
+  /// Storage path for approved community extensions (WebDeck Cloud).
+  final String? cloudPath;
   final String? sha256;
   final bool featured;
   final bool essential;
@@ -34,6 +38,7 @@ class StoreEntry {
     required this.catalog,
     this.assetDir,
     this.downloadUrl,
+    this.cloudPath,
     this.sha256,
     this.featured = false,
     this.essential = false,
@@ -101,6 +106,9 @@ class StoreService extends ChangeNotifier {
     _settings.addListener(_onSettingsChanged);
   }
 
+  /// Source of approved community extensions, when signed in to WebDeck Cloud.
+  CloudService? cloud;
+
   List<StoreEntry> _entries = [];
   final List<StoreCategory> _categoryInfo = [];
   List<StoreUpcoming> _upcoming = const [];
@@ -163,6 +171,24 @@ class StoreService extends ChangeNotifier {
         entries.addAll(await _loadRemote(url));
       } catch (e) {
         _catalogErrors[url] = '$e';
+      }
+    }
+    final c = cloud;
+    if (c != null) {
+      try {
+        await c.start();
+        if (c.ready) {
+          for (final r in await c.communityListings()) {
+            entries.add(StoreEntry(
+              manifest: WebDeckManifest.fromJson((r['manifest'] as Map).cast<String, dynamic>()),
+              catalog: 'Community',
+              cloudPath: r['file_path'] as String,
+              sha256: r['sha256'] as String?,
+            ));
+          }
+        }
+      } catch (e) {
+        _catalogErrors['Community'] = '$e';
       }
     }
     // Later catalogs can't shadow built-in ids.
@@ -281,6 +307,8 @@ class StoreService extends ChangeNotifier {
     try {
       final files = entry.bundled
           ? await _bundledFiles(entry)
+          : entry.cloudPath != null
+          ? await _downloadCloud(entry)
           : await _downloadFiles(entry);
       for (final r in entry.manifest.resources) {
         files.addAll(await _fetchResource(r));
@@ -317,6 +345,17 @@ class StoreService extends ChangeNotifier {
       throw StateError('Bundled app ${entry.id} is missing webdeck.json');
     }
     return files;
+  }
+
+  Future<Map<String, Uint8List>> _downloadCloud(StoreEntry entry) async {
+    final c = cloud;
+    if (c == null) throw StateError('WebDeck Cloud is not available');
+    final bytes = await c.downloadSubmission(entry.cloudPath!);
+    final expected = entry.sha256?.toLowerCase();
+    if (expected != null && sha256.convert(bytes).toString() != expected) {
+      throw StateError('Checksum mismatch for ${entry.manifest.name}');
+    }
+    return unpackZip(bytes);
   }
 
   Future<Map<String, Uint8List>> _downloadFiles(StoreEntry entry) async {

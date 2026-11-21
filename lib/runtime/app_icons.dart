@@ -46,6 +46,7 @@ class AppGlyphs {
     'database': Icons.storage_rounded,
     'transfer': Icons.swap_horiz_rounded,
     'share': Icons.share_rounded,
+    'network': Icons.network_check_rounded,
     'chat': Icons.chat_bubble_rounded,
     'clipboard': Icons.content_paste_rounded,
     'call': Icons.call_rounded,
@@ -59,6 +60,7 @@ class AppGlyphs {
     'veda': Icons.self_improvement_rounded,
     'cloud': Icons.cloud_queue_rounded,
     'booking': Icons.airplane_ticket_rounded,
+    'lock': Icons.lock_rounded,
   };
 
   static IconData of(String name) => glyphs[name] ?? Icons.apps_rounded;
@@ -116,7 +118,10 @@ class AppGlyphTile extends StatelessWidget {
   final String color;
   final double size;
 
-  const AppGlyphTile({super.key, required this.glyph, required this.color, this.size = 48});
+  /// Round instead of a rounded square.
+  final bool circle;
+
+  const AppGlyphTile({super.key, required this.glyph, required this.color, this.size = 48, this.circle = false});
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +131,8 @@ class AppGlyphTile extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.22),
+        shape: circle ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circle ? null : BorderRadius.circular(size * 0.22),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

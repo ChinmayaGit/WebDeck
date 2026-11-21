@@ -17,7 +17,24 @@ class SettingsService extends ChangeNotifier {
   List<String> _catalogUrls = const [];
   String _storeView = 'grid';
   bool _storeSqueeze = false;
+  Map<String, dynamic> _ui = {};
   bool _loaded = false;
+
+  /// Remembered UI state (filters, views) so screens reopen the way they were left.
+  T? ui<T>(String key) {
+    final v = _ui[key];
+    return v is T ? v : null;
+  }
+
+  Future<void> setUi(String key, Object? value) async {
+    if (_ui[key] == value) return;
+    if (value == null) {
+      _ui.remove(key);
+    } else {
+      _ui[key] = value;
+    }
+    await _save();
+  }
 
   /// Store layout: 'grid', 'list' or 'icons'.
   String get storeView => _storeView;
@@ -49,6 +66,7 @@ class SettingsService extends ChangeNotifier {
         _catalogUrls = (json['catalogUrls'] as List?)?.cast<String>() ?? const [];
         _storeView = json['storeView'] as String? ?? 'grid';
         _storeSqueeze = json['storeSqueeze'] as bool? ?? false;
+        _ui = (json['ui'] as Map?)?.cast<String, dynamic>() ?? {};
       }
     } catch (_) {
       // Fall back to defaults on a corrupt file.
@@ -68,6 +86,7 @@ class SettingsService extends ChangeNotifier {
         'catalogUrls': _catalogUrls,
         'storeView': _storeView,
         'storeSqueeze': _storeSqueeze,
+        'ui': _ui,
       }),
       flush: true,
     );

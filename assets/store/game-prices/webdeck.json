@@ -1,12 +1,22 @@
 {
   "id": "game-prices",
-  "name": "Game Price Tracker",
-  "version": "1.0.0",
+  "name": "Game Price Compare",
+  "version": "1.0.1",
   "description": "Compare PC game prices across 30+ stores (Steam, GOG, Humble, Fanatical, Epic, GreenManGaming…), browse today's best deals, and track games on a watchlist with price history, all-time lows and alerts when a game hits your target price. Prices from CheapShark (USD).",
-  "category": "Trackers",
+  "category": "Games",
   "icon": "game",
   "color": "#7C3AED",
-  "permissions": ["net", "notify", "jobs"],
-  "jobs": [{ "id": "check-games", "title": "Check game prices", "every": "6h" }],
+  "permissions": [
+    "net",
+    "notify",
+    "jobs"
+  ],
+  "jobs": [
+    {
+      "id": "check-games",
+      "title": "Check game prices",
+      "every": "6h"
+    }
+  ],
   "author": "WebDeck"
 }

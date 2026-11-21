@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>2048</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .box { background: #BBADA0; color: #fff; border-radius: 10px; padding: 6px 16px; text-align: center; min-width: 78px; }
+    .box span { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #EEE4DA; }
+    .box b { display: block; font-size: 20px; }
+    .grid { --t: min(20vw, 92px); position: relative; display: grid; grid-template-columns: repeat(4, var(--t)); grid-template-rows: repeat(4, var(--t));
+      gap: 10px; background: #BBADA0; padding: 10px; border-radius: 12px; touch-action: none; user-select: none; }
+    .tile { border-radius: 8px; display: grid; place-items: center; font-weight: 800; background: rgba(238,228,218,.35); color: #776E65; font-size: calc(var(--t) * .4); }
+    .tile.new { animation: appear .15s ease; }
+    .tile.merged { animation: pop .18s ease; }
+    @keyframes appear { from { transform: scale(.2); } to { transform: scale(1); } }
+    @keyframes pop { 50% { transform: scale(1.15); } }
+    .overlay { position: absolute; inset: 0; border-radius: 12px; background: rgba(238,228,218,.78); display: grid; place-content: center; gap: 12px; text-align: center; color: #776E65; }
+    .overlay h2 { font-size: 34px; margin: 0; }
+    .hint { color: var(--wd-muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:560px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#EDC22E;color:#fff;font-weight:900;font-size:14px">2048</div>
+      <div><h1>2048</h1><div class="wd-sub">Join the numbers and get to the 2048 tile</div></div>
+    </div>
+    <div class="wrap">
+      <div class="top">
+        <div class="box"><span>Score</span><b id="score">0</b></div>
+        <div class="box"><span>Best</span><b id="best">0</b></div>
+        <button class="wd-btn" id="undo">Undo</button>
+        <button class="wd-btn wd-btn-primary" id="newGame">New game</button>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="hint">Swipe on the board, or use the arrow keys / WASD.</div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -96,9 +96,17 @@ class StorageService {
     final index = apps.indexWhere((a) => a.id == appId);
     if (index >= 0) {
       final app = apps[index];
-      final appDir = Directory(app.installedPath);
-      if (await appDir.exists()) {
-        await appDir.delete(recursive: true);
+      // Web shortcuts have no install folder; never delete an empty/relative path.
+      if (app.installedPath.trim().isNotEmpty && p.isAbsolute(app.installedPath)) {
+        final appDir = Directory(app.installedPath);
+        if (await appDir.exists()) {
+          await appDir.delete(recursive: true);
+        }
+      }
+      if (app.isWebShortcut && app.localIconPath != null) {
+        try {
+          await File(app.localIconPath!).delete();
+        } catch (_) {}
       }
       apps.removeAt(index);
       await saveRegistry(apps);

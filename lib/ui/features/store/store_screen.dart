@@ -33,6 +33,24 @@ class _StoreScreenState extends State<StoreScreen> {
   Timer? _recentTimer;
 
   @override
+  void initState() {
+    super.initState();
+    final settings = context.read<SettingsService>();
+    _category = settings.ui<String>('store.category');
+    _essentialOnly = settings.ui<bool>('store.essential') ?? false;
+  }
+
+  void _setCategory(String? c) {
+    setState(() => _category = c);
+    context.read<SettingsService>().setUi('store.category', c);
+  }
+
+  void _setEssential(bool v) {
+    setState(() => _essentialOnly = v);
+    context.read<SettingsService>().setUi('store.essential', v ? true : null);
+  }
+
+  @override
   void dispose() {
     _recentTimer?.cancel();
     super.dispose();
@@ -172,21 +190,27 @@ class _StoreScreenState extends State<StoreScreen> {
                     FilterChip(
                       selected: !_essentialOnly,
                       label: Text('All Apps (${store.entries.length})'),
-                      selectedColor: WebDeckTheme.primary.withValues(alpha: 0.3),
+                      selectedColor: WebDeckTheme.primary.withValues(
+                        alpha: 0.3,
+                      ),
                       showCheckmark: false,
-                      onSelected: (_) => setState(() => _essentialOnly = false),
+                      onSelected: (_) => _setEssential(false),
                     ),
                     FilterChip(
                       selected: _essentialOnly,
-                      label: Text('★ Essential (${store.entries.where((e) => e.essential).length})'),
-                      selectedColor: WebDeckTheme.accentGreen.withValues(alpha: 0.3),
+                      label: Text(
+                        '★ Essential (${store.entries.where((e) => e.essential).length})',
+                      ),
+                      selectedColor: WebDeckTheme.accentGreen.withValues(
+                        alpha: 0.3,
+                      ),
                       showCheckmark: false,
-                      onSelected: (_) => setState(() => _essentialOnly = true),
+                      onSelected: (_) => _setEssential(true),
                     ),
                     if (_category != null)
                       Chip(
                         label: Text('Category: $_category'),
-                        onDeleted: () => setState(() => _category = null),
+                        onDeleted: () => _setCategory(null),
                         deleteIcon: const Icon(Icons.close, size: 14),
                       ),
                   ],
@@ -212,60 +236,63 @@ class _StoreScreenState extends State<StoreScreen> {
               )
             else if (browsing) ...[
               // ---- Browse: categories, featured, rows per category, coming soon.
-              _sectionTitle('Categories'),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 190,
-                    mainAxisExtent: 74,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  delegate: SliverChildListDelegate([
-                    for (final c in store.categories)
-                      _CategoryTile(
+              // Categories: one row of icon + name pills (never squeezed).
+              const SliverToBoxAdapter(child: SizedBox(height: 14)),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: store.categories.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final c = store.categories[i];
+                      return _CategoryPill(
                         category: store.category(c),
                         count: store.entries
                             .where((e) => e.manifest.category == c)
                             .length,
-                        onTap: () => setState(() => _category = c),
-                      ),
-                  ]),
+                        onTap: () => _setCategory(c),
+                      );
+                    },
+                  ),
                 ),
               ),
               if (featured.isNotEmpty) ...[
                 _sectionTitle('Featured'),
-                _row(
-                  [
-                    for (final f in featured)
-                      _FeaturedCard(
-                        entry: f,
-                        installed: installed[f.id],
-                        installing: store.isInstalling(f.id),
-                        onDetails: () => _showDetails(context, f),
-                        onInstall: () => _install(context, f),
-                        onOpen: () =>
-                            openRuntimeApp(context, catalog, installed[f.id]!),
-                      ),
-                  ],
-                  (330, 190),
-                  squeeze: settings.storeSqueeze,
-                  spacing: 14,
+                SliverToBoxAdapter(
+                  child: _FeaturedCarousel(
+                    cards: [
+                      for (final f in featured)
+                        _FeaturedCard(
+                          entry: f,
+                          installed: installed[f.id],
+                          installing: store.isInstalling(f.id),
+                          onDetails: () => _showDetails(context, f),
+                          onInstall: () => _install(context, f),
+                          onOpen: () => openRuntimeApp(
+                            context,
+                            catalog,
+                            installed[f.id]!,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
-              if (mine.isNotEmpty) ...[
-                _sectionTitle(
-                  'Your apps',
-                  trailing: '${mine.length} installed',
-                ),
-                section([for (final e in mine) item(e)]),
-              ],
+              // if (mine.isNotEmpty) ...[
+              //   _sectionTitle(
+              //     'Your apps',
+              //     trailing: '${mine.length} installed',
+              //   ),
+              //   section([for (final e in mine) item(e)]),
+              // ],
               for (final cat in store.categories) ...[
                 _sectionTitle(
                   cat,
                   category: store.category(cat),
-                  onSeeAll: () => setState(() => _category = cat),
+                  onSeeAll: () => _setCategory(cat),
                 ),
                 section([
                   for (final e in entries.where(
@@ -292,11 +319,11 @@ class _StoreScreenState extends State<StoreScreen> {
                     children: [
                       IconButton(
                         tooltip: 'Back to Store',
-                        onPressed: () => setState(() {
-                          _category = null;
-                          _query = '';
-                          _essentialOnly = false;
-                        }),
+                        onPressed: () {
+                          setState(() => _query = '');
+                          _setCategory(null);
+                          _setEssential(false);
+                        },
                         icon: const Icon(Icons.arrow_back),
                       ),
                       if (_category != null) ...[
@@ -343,7 +370,11 @@ class _StoreScreenState extends State<StoreScreen> {
               else if (view == _StoreView.grid)
                 _grid(context, entries, installed, store, catalog, bottom: 32)
               else ...[
-                _row([for (final e in entries) item(e)], itemSize, squeeze: true),
+                _row(
+                  [for (final e in entries) item(e)],
+                  itemSize,
+                  squeeze: true,
+                ),
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
             ],
@@ -495,7 +526,11 @@ class _StoreScreenState extends State<StoreScreen> {
                   value: v.name,
                   checked: view == v,
                   child: Row(
-                    children: [Icon(icon, size: 18), const SizedBox(width: 10), Text(label)],
+                    children: [
+                      Icon(icon, size: 18),
+                      const SizedBox(width: 10),
+                      Text(label),
+                    ],
                   ),
                 ),
               const PopupMenuDivider(),
@@ -534,7 +569,10 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  Future<void> _updateAll(BuildContext context, List<StoreEntry> updates) async {
+  Future<void> _updateAll(
+    BuildContext context,
+    List<StoreEntry> updates,
+  ) async {
     for (final e in updates) {
       await _install(context, e, confirmPermissions: false);
     }
@@ -546,46 +584,59 @@ class _StoreScreenState extends State<StoreScreen> {
     VoidCallback? onSeeAll,
     String? trailing,
   }) {
+    final seeAll = onSeeAll == null
+        ? null
+        : TextButton(onPressed: onSeeAll, child: const Text('See all'));
     return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 26, 12, 10),
-        child: Row(
-          children: [
-            if (category != null) ...[
-              AppGlyphTile(
-                glyph: category.icon,
-                color: category.color,
-                size: 26,
-              ),
-              const SizedBox(width: 10),
-            ],
-            Flexible(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const Spacer(),
-            if (trailing != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Text(
-                  trailing,
-                  style: const TextStyle(
-                    color: WebDeckTheme.textSecondary,
-                    fontSize: 12,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // On wide screens the right edge is far from the title, so "See all"
+          // sits next to the title; on phones it stays in the right corner.
+          final wide = constraints.maxWidth >= 700;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 26, 12, 10),
+            child: Row(
+              children: [
+                if (category != null) ...[
+                  AppGlyphTile(
+                    glyph: category.icon,
+                    color: category.color,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-            if (onSeeAll != null)
-              TextButton(onPressed: onSeeAll, child: const Text('See all')),
-          ],
-        ),
+                if (wide && seeAll != null) ...[
+                  const SizedBox(width: 8),
+                  seeAll,
+                ],
+                const Spacer(),
+                if (trailing != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      trailing,
+                      style: const TextStyle(
+                        color: WebDeckTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                if (!wide && seeAll != null) seeAll,
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1037,11 +1088,20 @@ class _StoreCard extends StatelessWidget {
                             if (entry.essential)
                               Container(
                                 margin: const EdgeInsets.only(left: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: WebDeckTheme.accentGreen.withValues(alpha: 0.15),
+                                  color: WebDeckTheme.accentGreen.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: WebDeckTheme.accentGreen.withValues(alpha: 0.4)),
+                                  border: Border.all(
+                                    color: WebDeckTheme.accentGreen.withValues(
+                                      alpha: 0.4,
+                                    ),
+                                  ),
                                 ),
                                 child: const Text(
                                   '★ Essential',
@@ -1250,11 +1310,11 @@ class _HeroState extends State<_Hero> {
   );
 }
 
-class _CategoryTile extends StatelessWidget {
+class _CategoryPill extends StatelessWidget {
   final StoreCategory category;
   final int count;
   final VoidCallback onTap;
-  const _CategoryTile({
+  const _CategoryPill({
     required this.category,
     required this.count,
     required this.onTap,
@@ -1265,49 +1325,211 @@ class _CategoryTile extends StatelessWidget {
     final c = AppGlyphs.parseColor(category.color);
     return Material(
       color: c.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(14),
+      shape: StadiumBorder(side: BorderSide(color: c.withValues(alpha: 0.4))),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: c.withValues(alpha: 0.35)),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 14, 4),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               AppGlyphTile(
                 glyph: category.icon,
                 color: category.color,
-                size: 38,
+                size: 26,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      category.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      '$count app${count == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: WebDeckTheme.textSecondary,
-                      ),
-                    ),
-                  ],
+              const SizedBox(width: 8),
+              Text(
+                category.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: WebDeckTheme.textSecondary,
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Paged carousel of featured cards. Each page is a grid sized to the screen:
+/// 1 large card on phones, 2×2 on tablets, 4×2 on wide screens.
+class _FeaturedCarousel extends StatefulWidget {
+  final List<Widget> cards;
+  const _FeaturedCarousel({required this.cards});
+
+  @override
+  State<_FeaturedCarousel> createState() => _FeaturedCarouselState();
+}
+
+class _FeaturedCarouselState extends State<_FeaturedCarousel> {
+  final _controller = PageController();
+  Timer? _auto;
+  DateTime _pausedUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  int _page = 0;
+  int _pages = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _auto = Timer.periodic(
+      const Duration(seconds: 6),
+      (_) => _advance(1, auto: true),
+    );
+  }
+
+  @override
+  void dispose() {
+    _auto?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _advance(int by, {bool auto = false}) {
+    if (_pages < 2 || !_controller.hasClients) return;
+    if (auto && DateTime.now().isBefore(_pausedUntil)) return;
+    final next = (_page + by) % _pages;
+    _controller.animateToPage(
+      next < 0 ? _pages - 1 : next,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _pause() =>
+      _pausedUntil = DateTime.now().add(const Duration(seconds: 12));
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final (cols, rows, cardH) = w < 600
+            ? (1, 1, 210.0)
+            : w < 1100
+            ? (2, 2, 176.0)
+            : (4, 2, 176.0);
+        final perPage = cols * rows;
+        final cards = widget.cards;
+        final pages = [
+          for (var i = 0; i < cards.length; i += perPage)
+            cards.sublist(i, (i + perPage).clamp(0, cards.length)),
+        ];
+        _pages = pages.length;
+        if (_page >= _pages) _page = _pages - 1;
+        // Don't leave empty rows when a page has few cards.
+        final rowsUsed = pages
+            .map((p) => (p.length / cols).ceil())
+            .fold(1, (a, b) => b > a ? b : a);
+        const gap = 12.0;
+        final height = rowsUsed * cardH + (rowsUsed - 1) * gap;
+
+        Widget page(List<Widget> items) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            children: [
+              for (var r = 0; r < rowsUsed; r++) ...[
+                if (r > 0) const SizedBox(height: gap),
+                SizedBox(
+                  height: cardH,
+                  child: Row(
+                    children: [
+                      for (var c = 0; c < cols; c++) ...[
+                        if (c > 0) const SizedBox(width: gap),
+                        Expanded(
+                          child: r * cols + c < items.length
+                              ? items[r * cols + c]
+                              : const SizedBox(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+
+        return Listener(
+          onPointerDown: (_) => _pause(),
+          child: Column(
+            children: [
+              SizedBox(
+                height: height,
+                child: PageView.builder(
+                  controller: _controller,
+                  itemCount: pages.length,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  itemBuilder: (_, i) => page(pages[i]),
+                ),
+              ),
+              if (_pages > 1)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (w >= 600)
+                        IconButton(
+                          tooltip: 'Previous',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            _pause();
+                            _advance(-1);
+                          },
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                      for (var i = 0; i < _pages; i++)
+                        GestureDetector(
+                          onTap: () {
+                            _pause();
+                            _controller.animateToPage(
+                              i,
+                              duration: const Duration(milliseconds: 400),
+                              curve: Curves.easeOutCubic,
+                            );
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: i == _page ? 22 : 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: i == _page
+                                  ? WebDeckTheme.primary
+                                  : WebDeckTheme.border,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      if (w >= 600)
+                        IconButton(
+                          tooltip: 'Next',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            _pause();
+                            _advance(1);
+                          },
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1487,7 +1709,9 @@ class _AppTile extends StatelessWidget {
                                   m.name,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                               if (entry.essential)
@@ -1718,7 +1942,11 @@ class _IconTile extends StatelessWidget {
                 children: [
                   Opacity(
                     opacity: m.supportsCurrentPlatform ? 1 : 0.4,
-                    child: AppGlyphTile(glyph: m.icon, color: m.color, size: 58),
+                    child: AppGlyphTile(
+                      glyph: m.icon,
+                      color: m.color,
+                      size: 58,
+                    ),
                   ),
                   if (installing)
                     const Positioned.fill(

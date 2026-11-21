@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tic-Tac-Toe</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .board { --cell: min(26vw, 110px); display: grid; grid-template-columns: repeat(3, var(--cell)); grid-template-rows: repeat(3, var(--cell)); gap: 10px; }
+    .cell { background: var(--wd-surface); border: 2px solid var(--wd-border); border-radius: 18px; font-size: calc(var(--cell) * .55); font-weight: 900;
+      display: grid; place-items: center; cursor: pointer; transition: transform .12s ease, background .15s ease; user-select: none; }
+    .cell:hover:empty { background: var(--wd-surface-2); }
+    .cell.x { color: #388BFD; } .cell.o { color: #EF4444; }
+    .cell.win { background: rgba(16,185,129,.18); border-color: #10B981; transform: scale(1.04); }
+    .cell.pop { animation: pop .18s ease; }
+    @keyframes pop { from { transform: scale(.6); opacity: .3; } to { transform: scale(1); opacity: 1; } }
+    .status { font-size: 20px; font-weight: 800; min-height: 28px; }
+    .score { display: flex; gap: 10px; }
+    .score div { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 12px; padding: 8px 16px; text-align: center; min-width: 74px; }
+    .score b { display: block; font-size: 22px; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:560px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#388BFD;color:#fff">✕</div>
+      <div><h1>Tic-Tac-Toe</h1><div class="wd-sub">Get three in a row</div></div>
+    </div>
+    <div class="wrap">
+      <div class="wd-row" style="gap:8px;justify-content:center;flex-wrap:wrap">
+        <select class="wd-select" id="mode" style="width:auto">
+          <option value="ai-smart">vs Unbeatable AI</option>
+          <option value="ai-easy">vs Casual AI</option>
+          <option value="pvp">2 players</option>
+        </select>
+        <button class="wd-btn" id="reset">New round</button>
+        <button class="wd-btn wd-btn-ghost" id="clearScore">Reset score</button>
+      </div>
+      <div class="status" id="status">X to move</div>
+      <div class="board" id="board"></div>
+      <div class="score"><div><span class="wd-small wd-muted">X</span><b id="sx">0</b></div><div><span class="wd-small wd-muted">Ties</span><b id="st">0</b></div><div><span class="wd-small wd-muted">O</span><b id="so">0</b></div></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -37,7 +37,7 @@ my-app/
 | :--- | :--- |
 | `id` | Lowercase letters, digits, `-`, `_`. Also the install folder and data folder name. |
 | `version` | Dotted numbers. The Store offers an update when the catalog has a higher version. |
-| `icon` | A built-in glyph: `app image photo video movie music audio download price chart ticket game gift doc pdf convert bell eye calendar note code tool globe cart rss folder cube invoice text`. |
+| `icon` | A built-in glyph: `app image photo video movie music audio download price chart ticket game gift doc pdf convert bell eye calendar note code tool globe cart rss folder cube invoice text lock`. |
 | `category` | Store section, e.g. `PDF`, `Image`, `Video`, `Audio`, `Documents`, `Downloaders`, `Trackers`, `Developer`, `Archive`, `Business`, `3D`. |
 | `color` | Icon tile color. |
 | `permissions` | Any of `net`, `files`, `notify`, `jobs`, `tools`, `localnet` (localhost/LAN fetches), `shell` (run any command; shown to users as a red warning), `link` (Device Link: paired devices on the LAN). Storage is always allowed. Users see these before installing. |
@@ -142,6 +142,22 @@ const msgs = await webdeck.cloud.inbox({ channel: 'myapp:chat', since: Date.now(
 Messages are relayed, not stored: keep anything you need with `webdeck.db`. For calls or large
 transfers, use `cloud.send` only to set up a WebRTC connection between the two devices.
 
+### Device lock: `auth` (always available)
+
+Fingerprint, Face ID, Touch ID or Windows Hello, through the system prompt. Secrets are private to
+your app, deleted when it is uninstalled, and only handed back after a successful biometric check.
+
+```js
+const { biometric } = await webdeck.auth.status();      // false on Linux or devices without enrolled biometrics
+if (biometric && await webdeck.auth.verify('Unlock My App')) { /* … */ }
+await webdeck.auth.setSecret('key', 'value', 'Enable fingerprint unlock');  // prompts first
+const value = await webdeck.auth.getSecret('key', 'Unlock My App');       // prompts; code 'cancelled' if refused
+await webdeck.auth.setSecret('key', null);                                 // delete
+```
+
+The secret is stored by WebDeck on the device, not in the OS keychain. Use it to hold a key that unlocks
+data you encrypt yourself, not as the only protection for that data.
+
 ### Notifications: `notify`
 
 ```js
@@ -210,6 +226,13 @@ Add `<link rel="stylesheet" href="/__webdeck/ui.css">` for WebDeck's look: `wd-a
 Helpers: `webdeck.ui.toast(msg, 'ok'|'error')`, `escape`, `formatBytes`, `timeAgo`. `webdeck.openUrl(url)` opens the system browser.
 
 > The embedded WebView has no `alert()` / `confirm()` / `prompt()`. Use in-page UI instead.
+
+## Publishing to the WebDeck Store
+
+Anyone can run their own extension locally (**Home → Add → Install web app**); no approval is needed.
+To list it for everyone, open **Store → Build extension → Submit for review** and pick your zip.
+The WebDeck team reviews each submission (and each new version); once approved it appears in every
+user's Store under **Community**. An extension `id` belongs to whoever submits it first.
 
 ## Publishing through a catalog
 

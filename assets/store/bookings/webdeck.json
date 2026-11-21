@@ -1,9 +1,9 @@
 {
   "id": "bookings",
-  "name": "Bookings & Ticket Tracker",
-  "version": "1.0.0",
+  "name": "My Bookings & Tickets",
+  "version": "1.0.1",
   "description": "Track flight, train, movie tickets, hotel bookings and doctor appointments. Displays real-time QR/barcodes for quick gate scanning, countdown timers, and calendar export.",
-  "category": "Documents",
+  "category": "Trackers",
   "icon": "booking",
   "color": "#6366F1",
   "permissions": [],

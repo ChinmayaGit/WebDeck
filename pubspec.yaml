@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.13.5
@@ -51,6 +51,9 @@ dependencies:
   crypto: ^3.0.6
   permission_handler: ^13.0.2
   supabase_flutter: ^2.18.3
+  app_links: ^7.2.2
+  xml: ^7.1.0
+  local_auth: ^3.0.2
 
 
 dev_dependencies:
@@ -88,6 +91,7 @@ flutter:
     - docs/building-apps.md
     - assets/store/image-converter/
     - assets/store/free-games/
+    - assets/store/free-apps/
     - assets/store/price-tracker/
     - assets/store/ticket-watcher/
     - assets/store/media-downloader/
@@ -102,6 +106,7 @@ flutter:
     - assets/store/game-prices/
     - assets/store/books/
     - assets/store/music/
+    - assets/store/network-monitor/
     - assets/store/video-player/
     - assets/store/iptv/
     - assets/store/flash-player/
@@ -119,7 +124,9 @@ flutter:
     - assets/store/cards-insurance/
     - assets/store/compass/
     - assets/store/radio/
-    - assets/store/mini-games/
+    - assets/store/chess/
+    - assets/store/tic-tac-toe/
+    - assets/store/game-2048/
     - assets/store/manga/
     - assets/store/camscanner/
     - assets/store/bills-tracker/
@@ -132,6 +139,7 @@ flutter:
     - assets/store/screen-share/
     - assets/store/ocr-scanner/
     - assets/store/font-converter/
+    - assets/store/password-vault/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

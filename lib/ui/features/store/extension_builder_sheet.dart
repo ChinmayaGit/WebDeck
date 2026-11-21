@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
@@ -6,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../../runtime/settings_service.dart';
+import '../../../runtime/cloud_service.dart';
+import '../../../runtime/manifest.dart';
+import '../../../runtime/store_service.dart';
 import '../../core/theme.dart';
 import '../catalog/view_models/catalog_view_model.dart';
 import '../catalog/views/install_dialog.dart';
@@ -28,6 +31,98 @@ Future<String> loadExtensionSkill() async {
   // Drop the reference's own H1; the header already introduces it.
   final body = reference.replaceFirst(RegExp(r'^# .*\n'), '');
   return '$header$body';
+}
+
+/// A minimal working extension to start from (plus the AI skill).
+Future<Uint8List> buildStarterTemplate() async {
+  const manifest = '''{
+  "id": "my-extension",
+  "name": "My Extension",
+  "version": "1.0.0",
+  "description": "What it does, in one or two sentences.",
+  "category": "Tools",
+  "icon": "tool",
+  "color": "#2563EB",
+  "entry": "index.html",
+  "permissions": [],
+  "author": "You"
+}
+''';
+  const html = '''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Extension</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+</head>
+<body>
+  <div class="wd-app" style="max-width:720px">
+    <div class="wd-header">
+      <div class="wd-icon">🧩</div>
+      <div><h1>My Extension</h1><div class="wd-sub">Edit index.html and app.js to make it yours</div></div>
+    </div>
+    <div class="wd-card">
+      <div class="wd-row">
+        <input class="wd-input wd-grow" id="text" placeholder="Write a note">
+        <button class="wd-btn wd-btn-primary" id="add">Add</button>
+      </div>
+      <div class="wd-list" id="list" style="margin-top:12px"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
+''';
+  const js = r'''(() => {
+  const wd = window.webdeck;
+  const notes = wd.db.collection('notes'); // private storage, kept across updates
+  const $ = (id) => document.getElementById(id);
+
+  async function render() {
+    const items = await notes.find(null, { sort: '-_createdAt' });
+    $('list').innerHTML = items.length
+      ? items.map((n) => `<div class="wd-item"><div class="wd-grow">${wd.ui.escape(n.text)}</div>
+          <button class="wd-btn wd-btn-sm wd-btn-ghost" data-rm="${n._id}">✕</button></div>`).join('')
+      : '<div class="wd-empty">Nothing yet. Add your first note.</div>';
+  }
+
+  $('add').onclick = async () => {
+    const text = $('text').value.trim();
+    if (!text) return;
+    await notes.insert({ text });
+    $('text').value = '';
+    render();
+  };
+  $('list').onclick = async (e) => {
+    const id = e.target.dataset.rm;
+    if (id) { await notes.remove(id); render(); }
+  };
+  render();
+})();
+''';
+  const readme = '''# My Extension
+
+1. Change "id" (lowercase, permanent) and "name" in webdeck.json.
+2. Edit index.html / app.js. The SDK is `window.webdeck` (see SKILL.md for the full reference).
+3. Zip this folder and install it in WebDeck: Home → Add → Install web app.
+4. To publish: Store → Build extension → Submit for review.
+
+Tip: give SKILL.md to any AI assistant and describe what you want; it will write the files for you.
+''';
+  final skill = await loadExtensionSkill();
+  final archive = Archive();
+  void add(String name, String text) {
+    final bytes = utf8.encode(text);
+    archive.addFile(ArchiveFile('my-extension/$name', bytes.length, bytes));
+  }
+
+  add('webdeck.json', manifest);
+  add('index.html', html);
+  add('app.js', js);
+  add('README.md', readme);
+  add('SKILL.md', skill);
+  return Uint8List.fromList(ZipEncoder().encode(archive));
 }
 
 const _examplePrompt =
@@ -60,6 +155,130 @@ class _ExtensionBuilderDialog extends StatelessWidget {
     }
   }
 
+  Future<void> _saveTemplate(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await FilePicker.saveFile(
+        dialogTitle: 'Save the starter template',
+        fileName: 'webdeck-extension-template.zip',
+        bytes: await buildStarterTemplate(),
+      );
+      if (path != null) messenger.showSnackBar(SnackBar(content: Text('Template saved to $path')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not save: $e'), backgroundColor: WebDeckTheme.accentRed));
+    }
+  }
+
+  /// Validates a zip and submits it to the WebDeck Store for owner review.
+  Future<void> _submit(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final cloud = context.read<CloudService>();
+    final file = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['zip']);
+    if (file == null) return;
+    final Uint8List bytes;
+    try {
+      if (file.path == null) return;
+      bytes = await File(file.path!).readAsBytes();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not read the zip: $e'), backgroundColor: WebDeckTheme.accentRed));
+      return;
+    }
+    WebDeckManifest manifest;
+    Map<String, dynamic> manifestJson;
+    try {
+      final files = StoreService.unpackZip(bytes);
+      final raw = files[WebDeckManifest.fileName];
+      if (raw == null) throw const FormatException('The zip has no webdeck.json at its top level.');
+      manifestJson = (jsonDecode(utf8.decode(raw)) as Map).cast<String, dynamic>();
+      manifest = WebDeckManifest.fromJson(manifestJson);
+      if (!files.containsKey(manifest.entry)) {
+        throw FormatException('The entry page "${manifest.entry}" is missing from the zip.');
+      }
+      if (!RegExp(r'^[a-z0-9][a-z0-9_-]{1,63}$').hasMatch(manifest.id)) {
+        throw const FormatException('"id" must be 2–64 lowercase letters, digits, "-" or "_".');
+      }
+      if (bytes.length > 25 * 1024 * 1024) throw const FormatException('The zip must be 25 MB or smaller.');
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Not a valid extension: ${e is FormatException ? e.message : e}'), backgroundColor: WebDeckTheme.accentRed));
+      return;
+    }
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WebDeckTheme.surface,
+        title: Text('Submit ${manifest.name}?'),
+        content: Text(
+          'id: ${manifest.id} · version ${manifest.version}\n'
+          'Permissions: ${manifest.permissions.isEmpty ? 'none' : manifest.permissions.join(', ')}\n\n'
+          'It will appear in everyone\'s Store after the WebDeck team reviews and approves it. '
+          'You can keep using it on your own devices right away.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Submit for review')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await cloud.start();
+      await cloud.submitExtension(zip: bytes, manifest: manifestJson);
+      messenger.showSnackBar(SnackBar(content: Text('${manifest.name} submitted. Status: waiting for review.')));
+    } on CloudException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message), backgroundColor: WebDeckTheme.accentRed));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Submit failed: $e'), backgroundColor: WebDeckTheme.accentRed));
+    }
+  }
+
+  Future<void> _showSubmissions(BuildContext context) async {
+    final cloud = context.read<CloudService>();
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: WebDeckTheme.surface,
+        title: const Text('My submissions'),
+        content: SizedBox(
+          width: 460,
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: cloud.start().then((_) => cloud.mySubmissions()),
+            builder: (_, snap) {
+              if (snap.hasError) return Text('${snap.error}');
+              if (!snap.hasData) return const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()));
+              final rows = snap.data!;
+              if (rows.isEmpty) return const Text('Nothing submitted yet.');
+              return ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final r in rows)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(switch (r['status']) {
+                        'approved' => Icons.check_circle,
+                        'rejected' => Icons.cancel,
+                        _ => Icons.hourglass_top,
+                      }, color: switch (r['status']) {
+                        'approved' => WebDeckTheme.accentGreen,
+                        'rejected' => WebDeckTheme.accentRed,
+                        _ => WebDeckTheme.textSecondary,
+                      }),
+                      title: Text('${r['name']} · v${r['version']}'),
+                      subtitle: Text([
+                        switch (r['status']) { 'approved' => 'Approved: live in the Store', 'rejected' => 'Not approved', _ => 'Waiting for review' },
+                        if ((r['review_note'] as String?)?.isNotEmpty == true) r['review_note'],
+                      ].join(' · ')),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
   Future<void> _copySkill(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     await Clipboard.setData(ClipboardData(text: await loadExtensionSkill()));
@@ -69,27 +288,7 @@ class _ExtensionBuilderDialog extends StatelessWidget {
   }
 
   Future<void> _installLocal(BuildContext context) async {
-    final settings = context.read<SettingsService>();
     final catalog = context.read<CatalogViewModel>();
-    if (!settings.developerMode) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: WebDeckTheme.surface,
-          title: const Text('Turn on Developer mode?'),
-          content: const Text(
-            'Installing your own extensions from a zip or folder needs Developer mode. '
-            'You can turn it off again in Settings.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Turn on')),
-          ],
-        ),
-      );
-      if (ok != true) return;
-      await settings.setDeveloperMode(true);
-    }
     if (!context.mounted) return;
     final navigator = Navigator.of(context);
     final rootContext = navigator.context;
@@ -167,6 +366,11 @@ class _ExtensionBuilderDialog extends StatelessWidget {
                           icon: const Icon(Icons.copy, size: 18),
                           label: const Text('Copy for any AI'),
                         ),
+                        OutlinedButton.icon(
+                          onPressed: () => _saveTemplate(context),
+                          icon: const Icon(Icons.folder_zip_outlined, size: 18),
+                          label: const Text('Starter template'),
+                        ),
                       ],
                     ),
                     _Step(
@@ -200,6 +404,7 @@ class _ExtensionBuilderDialog extends StatelessWidget {
                       n: 3,
                       title: 'Install and test it',
                       body: 'Put the files the AI gives you in one folder (or zip it), then install it here. '
+                          'Anyone can run their own extensions locally; no approval needed. '
                           'Bump "version" in webdeck.json and install again to update; your data is kept.',
                       actions: [
                         FilledButton.tonalIcon(
@@ -209,12 +414,25 @@ class _ExtensionBuilderDialog extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const _Step(
+                    _Step(
                       n: 4,
-                      title: 'Share it',
-                      body: 'Host the zip and a catalog JSON (a GitHub repo with Releases works, for free), '
-                          'then add the catalog URL in Settings → Store sources. Everyone who adds that URL '
-                          'sees your extensions in their Store and gets your updates.',
+                      title: 'Publish it to the WebDeck Store',
+                      body: 'Submit your zip for review. Once approved, everyone can install it from the Store '
+                          '(Community). Updates are reviewed too: bump "version" and submit again.\n'
+                          'Prefer to host it yourself? Put the zip and a catalog JSON on GitHub and add the URL '
+                          'in Settings → Store sources.',
+                      actions: [
+                        FilledButton.icon(
+                          onPressed: () => _submit(context),
+                          icon: const Icon(Icons.publish, size: 18),
+                          label: const Text('Submit for review'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _showSubmissions(context),
+                          icon: const Icon(Icons.list_alt, size: 18),
+                          label: const Text('My submissions'),
+                        ),
+                      ],
                     ),
                   ],
                 ),

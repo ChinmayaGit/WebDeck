@@ -1,12 +1,22 @@
 {
   "id": "free-games",
-  "name": "Free Games",
-  "version": "1.0.0",
-  "description": "Every current free-to-keep game giveaway on Epic, Steam, GOG, itch.io, consoles and mobile in one place, with notifications when new ones appear on the stores you care about. Data from GamerPower.",
-  "category": "Trackers",
+  "name": "Free Game Giveaways",
+  "version": "2.3.1",
+  "description": "Every free game in one place: free-to-keep giveaways (Epic, Steam, GOG, Ubisoft, itch.io, consoles, mobile) with what Epic gives away next, 400+ free-to-play PC and browser games, top free mobile games, and what you can play with Game Pass, PS Plus, Crunchyroll, Apple Arcade and more. Alerts for new giveaways.",
+  "category": "Games",
   "icon": "game",
   "color": "#6366F1",
-  "permissions": ["net", "notify", "jobs"],
-  "jobs": [{ "id": "check-giveaways", "title": "Check for new free games", "every": "6h" }],
+  "permissions": [
+    "net",
+    "notify",
+    "jobs"
+  ],
+  "jobs": [
+    {
+      "id": "check-giveaways",
+      "title": "Check for new free games",
+      "every": "6h"
+    }
+  ],
   "author": "WebDeck"
 }

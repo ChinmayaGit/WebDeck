@@ -1,6 +1,11 @@
 {
   "categories": [
     {
+      "name": "Deals",
+      "icon": "gift",
+      "color": "#16A34A"
+    },
+    {
       "name": "PDF",
       "icon": "pdf",
       "color": "#DC2626"
@@ -79,6 +84,11 @@
       "name": "Games",
       "icon": "flash",
       "color": "#DC2626"
+    },
+    {
+      "name": "Tools",
+      "icon": "lock",
+      "color": "#6366F1"
     }
   ],
   "apps": [
@@ -87,47 +97,52 @@
     "video-toolkit",
     "audio-converter",
     "doc-converter",
+    "camscanner",
+    "ocr-scanner",
+    "notes",
     "media-downloader",
+    "torrent-downloader",
+    "free-apps",
     "price-tracker",
-    "free-games",
     "ticket-watcher",
+    "bookings",
+    "bills-tracker",
+    "free-games",
+    "game-prices",
+    "games",
+    "chess",
+    "tic-tac-toe",
+    "game-2048",
+    "flash-player",
     "developer-toolkit",
+    "api-client",
+    "terminal",
+    "database-studio",
+    "alpine-host",
+    "font-converter",
     "zip-tool",
     "invoice-generator",
     "model-converter",
-    "game-prices",
     "books",
+    "manga",
+    "vedas",
     "music",
+    "radio",
     "video-player",
     "iptv",
-    "flash-player",
-    "api-client",
-    "terminal",
+    "movies",
     "workout",
     "health",
-    "file-transfer",
-    "nearby-share",
-    "messages",
-    "clipboard-sync",
-    "movies",
-    "games",
-    "vedas",
-    "cards-insurance",
-    "compass",
-    "radio",
-    "mini-games",
-    "manga",
-    "camscanner",
-    "bills-tracker",
-    "notes",
-    "bookings",
-    "alpine-host",
-    "database-studio",
-    "torrent-downloader",
     "calls",
+    "messages",
+    "nearby-share",
     "screen-share",
-    "ocr-scanner",
-    "font-converter"
+    "clipboard-sync",
+    "file-transfer",
+    "network-monitor",
+    "password-vault",
+    "cards-insurance",
+    "compass"
   ],
   "essential": [
     "notes",
@@ -141,12 +156,14 @@
     "developer-toolkit",
     "terminal",
     "books",
-    "compass"
+    "compass",
+    "password-vault"
   ],
   "featured": [
     "movies",
     "games",
     "vedas",
+    "password-vault",
     "camscanner",
     "bills-tracker",
     "pdf-toolkit",
@@ -161,13 +178,6 @@
     "price-tracker"
   ],
   "upcoming": [
-    {
-      "name": "Password Vault",
-      "category": "Tools",
-      "icon": "tool",
-      "color": "#6366F1",
-      "description": "Offline encrypted password and credential manager with AES-256 and zero-knowledge encryption."
-    },
     {
       "name": "Podcast Studio",
       "category": "Audio",

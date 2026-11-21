@@ -1,0 +1,13 @@
+{
+  "id": "free-apps",
+  "name": "Free Apps",
+  "version": "1.2.0",
+  "description": "Free apps for Windows, Mac, Linux, Android and iOS in one place: where paid apps go free (Play Store and App Store deals, PC software giveaways), live App Store top-free charts, a hand-picked list of the best free open-source apps, and the app bundles included with subscriptions like Setapp, Play Pass and Microsoft 365.",
+  "category": "Deals",
+  "icon": "gift",
+  "color": "#16A34A",
+  "permissions": [
+    "net"
+  ],
+  "author": "WebDeck"
+}

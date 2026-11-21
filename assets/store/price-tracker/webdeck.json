@@ -1,9 +1,9 @@
 {
   "id": "price-tracker",
-  "name": "Price Tracker",
-  "version": "1.1.0",
+  "name": "Shop Price Tracker",
+  "version": "1.1.1",
   "description": "Track product prices on any shop and see the full price history: a chart and change log for every item, plus a timeline of all price changes. Get notified when a price drops or hits your target. Checks run in the background every 4 hours.",
-  "category": "Trackers",
+  "category": "Deals",
   "icon": "price",
   "color": "#10B981",
   "permissions": [

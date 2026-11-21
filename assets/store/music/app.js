@@ -2,6 +2,27 @@
   const wd = window.webdeck;
   const esc = wd.ui.escape;
   const $ = (id) => document.getElementById(id);
+  // Material icons as inline SVG (works offline).
+  const ICON = {
+    play: 'M8 5v14l11-7z', pause: 'M6 19h4V5H6v14zm8-14v14h4V5h-4z',
+    next: 'M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z', prev: 'M6 6h2v12H6zm3.5 6 8.5 6V6z',
+    shuffle: 'M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z',
+    repeat: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
+    repeatOne: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z',
+    heart: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
+    heartOutline: 'M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z',
+    close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
+    eq: 'M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z',
+  };
+  const svg = (name) => `<svg class="i" viewBox="0 0 24 24"><path d="${ICON[name]}"/></svg>`;
+  // Stable cover colors per song/album.
+  const HUES = [[350, 280], [200, 250], [160, 200], [25, 345], [45, 15], [265, 310], [190, 140]];
+  function coverStyle(key) {
+    let h = 0;
+    for (const ch of String(key || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const [a, b] = HUES[h % HUES.length];
+    return `background:linear-gradient(135deg,hsl(${a} 75% 52%),hsl(${b} 70% 38%))`;
+  }
   const tracksDb = wd.db.collection('tracks');
   const audio = $('audio');
   const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'opus', 'oga', 'alac', 'aif', 'aiff'];
@@ -53,10 +74,10 @@
   function trackRow(t, i, listName) {
     const playing = current && (current.path ? current.path === t.path : current.url === t.url);
     return `<div class="track ${playing ? 'playing' : ''}" data-list="${listName}" data-i="${i}">
-      <span class="n">${playing && !audio.paused ? '▶' : i + 1}</span>
+      <span class="n" style="${coverStyle(t.album || t.title)}">${playing && !audio.paused ? svg('eq') : esc((t.title || '?').trim().charAt(0).toUpperCase())}</span>
       <div style="min-width:0"><div class="wd-ellipsis">${esc(t.title)}</div><div class="wd-small wd-muted wd-ellipsis">${esc([t.artist, t.album].filter(Boolean).join(' · '))}</div></div>
-      ${t._id ? `<button class="heart ${t.fav ? 'on' : ''}" data-fav="${t._id}" title="Favorite">${t.fav ? '♥' : '♡'}</button>` : '<span></span>'}
-      ${t._id ? `<button class="wd-btn wd-btn-sm wd-btn-ghost" data-rm="${t._id}" title="Remove from library">✕</button>` : '<span></span>'}
+      ${t._id ? `<button class="icon-btn heart ${t.fav ? 'on' : ''}" data-fav="${t._id}" title="Favorite">${svg(t.fav ? 'heart' : 'heartOutline')}</button>` : '<span></span>'}
+      ${t._id ? `<button class="icon-btn" data-rm="${t._id}" title="Remove from library">${svg('close')}</button>` : '<span></span>'}
     </div>`;
   }
   let views = { lib: [], fav: [], free: [] };
@@ -178,6 +199,7 @@
       wd.ui.toast(`Can't play “${current.title}”: ${err.message}`, 'error');
     }
     $('npTitle').textContent = current.title;
+    $('npArt').setAttribute('style', coverStyle(current.album || current.title));
     $('npSub').textContent = [current.artist, current.album].filter(Boolean).join(' · ');
     document.title = `${current.title} · Music`;
     if ('mediaSession' in navigator) {
@@ -197,8 +219,8 @@
     if (!shuffle && index === queue.length - 1 && repeat === 'off') return;
     step(1);
   });
-  audio.addEventListener('play', () => ($('play').textContent = '⏸'));
-  audio.addEventListener('pause', () => ($('play').textContent = '▶'));
+  audio.addEventListener('play', () => { $('play').innerHTML = svg('pause'); renderLibrary(); renderFavs(); });
+  audio.addEventListener('pause', () => { $('play').innerHTML = svg('play'); renderLibrary(); renderFavs(); });
   audio.addEventListener('timeupdate', () => {
     $('cur').textContent = fmtT(audio.currentTime);
     $('dur').textContent = fmtT(audio.duration);
@@ -215,8 +237,17 @@
   $('repeat').onclick = () => {
     repeat = repeat === 'off' ? 'all' : repeat === 'all' ? 'one' : 'off';
     $('repeat').classList.toggle('on', repeat !== 'off');
-    $('repeat').textContent = repeat === 'one' ? '🔂' : '🔁';
+    $('repeat').innerHTML = svg(repeat === 'one' ? 'repeatOne' : 'repeat');
   };
+  $('play').innerHTML = svg('play');
+  $('next').innerHTML = svg('next');
+  $('prev').innerHTML = svg('prev');
+  $('shuffle').innerHTML = svg('shuffle');
+  $('repeat').innerHTML = svg('repeat');
+  // Tap the song info to expand into Now Playing; chevron or Escape to collapse.
+  $('npInfo').onclick = () => $('player').classList.toggle('expanded');
+  $('npClose').onclick = () => $('player').classList.remove('expanded');
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('player').classList.remove('expanded'); });
   $('vol').oninput = () => { audio.volume = $('vol').value / 100; wd.kv.set('volume', audio.volume); };
   if ('mediaSession' in navigator) {
     navigator.mediaSession.setActionHandler('play', () => audio.play());

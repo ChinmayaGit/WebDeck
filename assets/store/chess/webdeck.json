@@ -1,0 +1,11 @@
+{
+  "id": "chess",
+  "name": "Chess",
+  "version": "1.0.0",
+  "description": "Full chess with real rules (check, checkmate, castling, en passant, promotion, draws). Play the computer at three levels or a friend on the same device. Undo, flip board, move list, and your game is saved when you leave.",
+  "category": "Games",
+  "icon": "chess",
+  "color": "#8B5CF6",
+  "permissions": [],
+  "author": "WebDeck"
+}

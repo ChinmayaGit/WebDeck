@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../data/services/feed_service.dart';
+import '../../../data/services/storage_service.dart';
+import '../../../runtime/settings_service.dart';
 import '../../core/theme.dart';
 
 class FeedItem {
@@ -14,6 +20,9 @@ class FeedItem {
   final String date;
   final String url;
   final String level;
+  final String? imageUrl;
+  final bool isVideo;
+  final DateTime? published;
 
   const FeedItem({
     required this.id,
@@ -26,7 +35,37 @@ class FeedItem {
     required this.date,
     required this.url,
     this.level = 'Deep Dive',
+    this.imageUrl,
+    this.isVideo = false,
+    this.published,
   });
+
+  factory FeedItem.fromLive(LiveFeedItem l) => FeedItem(
+    id: l.id,
+    title: l.title,
+    category: l.category,
+    source: l.source,
+    summary: l.summary,
+    takeaways: const [],
+    readTime: l.isVideo
+        ? 'Video'
+        : (l.readMinutes > 0 ? '${l.readMinutes} min read' : 'Article'),
+    date: _ago(l.published),
+    url: l.url,
+    level: l.isVideo ? 'Video' : 'Latest',
+    imageUrl: l.imageUrl,
+    isVideo: l.isVideo,
+    published: l.published,
+  );
+
+  static String _ago(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 60) return '${d.inMinutes.clamp(1, 59)}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    if (d.inDays == 1) return 'Yesterday';
+    if (d.inDays < 30) return '${d.inDays}d ago';
+    return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
+  }
 }
 
 class FeedsScreen extends StatefulWidget {
@@ -42,8 +81,100 @@ class _FeedsScreenState extends State<FeedsScreen> {
   final Set<String> _bookmarked = {};
   final Set<String> _expanded = {};
 
+  FeedService? _service;
+  List<LiveFeedItem> _live = const [];
+  final Map<String, LiveFeedItem> _savedLive = {};
+  bool _loading = false;
+  String? _error;
+  DateTime? _updatedAt;
+  final _refreshKey = GlobalKey<RefreshIndicatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = context.read<SettingsService>();
+    _selectedCategory = settings.ui<String>('feeds.category') ?? 'All';
+    _bookmarked.addAll(
+      (settings.ui<List>('feeds.saved') ?? const []).cast<String>(),
+    );
+    for (final j in (settings.ui<List>('feeds.savedItems') ?? const [])) {
+      try {
+        final item = LiveFeedItem.fromJson((j as Map).cast<String, dynamic>());
+        _savedLive[item.id] = item;
+      } catch (_) {}
+    }
+    _service = FeedService(context.read<StorageService>().getBaseDirectory);
+    _service!.cached().then((items) {
+      if (mounted && items.isNotEmpty && _live.isEmpty) {
+        setState(() => _live = items);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+  }
+
+  Future<void> _refresh() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final items = await _service!.refresh();
+      if (!mounted) return;
+      setState(() {
+        _live = items;
+        _updatedAt = DateTime.now();
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = _live.isEmpty
+              ? 'Could not load new feeds. Check your connection.'
+              : 'Offline: showing saved feeds',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _setCategory(String c) {
+    setState(() => _selectedCategory = c);
+    context.read<SettingsService>().setUi('feeds.category', c);
+  }
+
+  void _toggleBookmark(FeedItem item) {
+    setState(() {
+      if (!_bookmarked.remove(item.id)) {
+        _bookmarked.add(item.id);
+        final live = _live.where((l) => l.id == item.id).firstOrNull;
+        if (live != null) _savedLive[live.id] = live;
+      } else {
+        _savedLive.remove(item.id);
+      }
+    });
+    final settings = context.read<SettingsService>();
+    settings.setUi('feeds.saved', _bookmarked.toList());
+    settings.setUi(
+      'feeds.savedItems',
+      _savedLive.values.map((e) => e.toJson()).toList(),
+    );
+  }
+
+  List<FeedItem> get _allItems {
+    final liveIds = _live.map((l) => l.id).toSet();
+    return [
+      ..._live.map(FeedItem.fromLive),
+      ..._savedLive.values
+          .where((l) => !liveIds.contains(l.id))
+          .map(FeedItem.fromLive),
+      ..._allFeeds,
+    ];
+  }
+
   static const _categories = [
     'All',
+    'Videos',
     'AI & Research',
     'Tech & Dev',
     'Space & Science',
@@ -188,10 +319,11 @@ class _FeedsScreenState extends State<FeedsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _allFeeds.where((f) {
+    final filtered = _allItems.where((f) {
       if (_selectedCategory == 'Saved') {
         if (!_bookmarked.contains(f.id)) return false;
-      } else if (_selectedCategory != 'All' && f.category != _selectedCategory) {
+      } else if (_selectedCategory != 'All' &&
+          f.category != _selectedCategory) {
         return false;
       }
       if (_query.isEmpty) return true;
@@ -221,7 +353,11 @@ class _FeedsScreenState extends State<FeedsScreen> {
                         color: WebDeckTheme.primary.withValues(alpha: 0.3),
                       ),
                     ),
-                    child: const Icon(Icons.school, color: WebDeckTheme.primary, size: 20),
+                    child: const Icon(
+                      Icons.school,
+                      color: WebDeckTheme.primary,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -237,7 +373,7 @@ class _FeedsScreenState extends State<FeedsScreen> {
                           ),
                         ),
                         Text(
-                          'High-signal tech, science, engineering & research concepts',
+                          'Latest articles and videos · pull down to refresh',
                           style: TextStyle(
                             fontSize: 12,
                             color: WebDeckTheme.textSecondary,
@@ -246,6 +382,20 @@ class _FeedsScreenState extends State<FeedsScreen> {
                       ],
                     ),
                   ),
+                  if (_loading)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    IconButton(
+                      tooltip: _updatedAt == null
+                          ? 'Refresh'
+                          : 'Refresh (updated ${FeedItem._ago(_updatedAt!)})',
+                      onPressed: () => _refreshKey.currentState?.show(),
+                      icon: const Icon(Icons.refresh),
+                    ),
                 ],
               ),
             ),
@@ -254,11 +404,21 @@ class _FeedsScreenState extends State<FeedsScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: TextField(
-                style: const TextStyle(fontSize: 13, color: WebDeckTheme.textPrimary),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: WebDeckTheme.textPrimary,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Search concepts, research papers, topics…',
-                  hintStyle: const TextStyle(color: WebDeckTheme.textSecondary, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search, size: 18, color: WebDeckTheme.textSecondary),
+                  hintStyle: const TextStyle(
+                    color: WebDeckTheme.textSecondary,
+                    fontSize: 13,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: WebDeckTheme.textSecondary,
+                  ),
                   suffixIcon: _query.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, size: 16),
@@ -266,7 +426,10 @@ class _FeedsScreenState extends State<FeedsScreen> {
                         )
                       : null,
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   filled: true,
                   fillColor: WebDeckTheme.surface,
                   border: OutlineInputBorder(
@@ -286,7 +449,10 @@ class _FeedsScreenState extends State<FeedsScreen> {
             SizedBox(
               height: 46,
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 scrollDirection: Axis.horizontal,
                 itemCount: _categories.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
@@ -298,8 +464,12 @@ class _FeedsScreenState extends State<FeedsScreen> {
                       cat == 'Saved' ? '★ Saved (${_bookmarked.length})' : cat,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                        color: isSelected ? Colors.white : WebDeckTheme.textSecondary,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: isSelected
+                            ? Colors.white
+                            : WebDeckTheme.textSecondary,
                       ),
                     ),
                     selected: isSelected,
@@ -310,255 +480,415 @@ class _FeedsScreenState extends State<FeedsScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                       side: BorderSide(
-                        color: isSelected ? WebDeckTheme.primary : WebDeckTheme.border,
+                        color: isSelected
+                            ? WebDeckTheme.primary
+                            : WebDeckTheme.border,
                       ),
                     ),
-                    onSelected: (_) => setState(() => _selectedCategory = cat),
+                    onSelected: (_) => _setCategory(cat),
                   );
                 },
               ),
             ),
 
             const Divider(height: 1, color: WebDeckTheme.border),
+            if (_error != null)
+              Container(
+                width: double.infinity,
+                color: WebDeckTheme.accentRed.withValues(alpha: 0.12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 6,
+                ),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: WebDeckTheme.accentRed,
+                  ),
+                ),
+              ),
 
             // Articles List
             Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+              child: RefreshIndicator(
+                key: _refreshKey,
+                onRefresh: _refresh,
+                child: filtered.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          Icon(
-                            _selectedCategory == 'Saved' ? Icons.bookmark_border : Icons.article_outlined,
-                            size: 40,
-                            color: WebDeckTheme.textSecondary,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            _selectedCategory == 'Saved'
-                                ? 'No saved articles yet. Bookmark feeds to read offline!'
-                                : 'No learning feeds found for this filter.',
-                            style: const TextStyle(color: WebDeckTheme.textSecondary, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 14),
-                      itemBuilder: (ctx, i) {
-                        final item = filtered[i];
-                        final isBookmarked = _bookmarked.contains(item.id);
-                        final isExpanded = _expanded.contains(item.id);
-
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: WebDeckTheme.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: WebDeckTheme.border),
-                          ),
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Source & Category & Level
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: WebDeckTheme.primary.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      item.category,
-                                      style: const TextStyle(
-                                        color: WebDeckTheme.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: WebDeckTheme.surfaceSubtle,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: WebDeckTheme.border),
-                                    ),
-                                    child: Text(
-                                      item.level,
-                                      style: const TextStyle(
-                                        color: WebDeckTheme.textSecondary,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    '${item.readTime} · ${item.date}',
-                                    style: const TextStyle(
-                                      color: WebDeckTheme.textSecondary,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-
-                              // Title
-                              Text(
-                                item.title,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: WebDeckTheme.textPrimary,
-                                  height: 1.35,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              // Source
-                              Text(
-                                'Source: ${item.source}',
-                                style: const TextStyle(
-                                  fontSize: 11,
+                          const SizedBox(height: 80),
+                          Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _selectedCategory == 'Saved'
+                                      ? Icons.bookmark_border
+                                      : Icons.article_outlined,
+                                  size: 40,
                                   color: WebDeckTheme.textSecondary,
-                                  fontStyle: FontStyle.italic,
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-
-                              // Summary
-                              Text(
-                                item.summary,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: WebDeckTheme.textSecondary,
-                                  height: 1.45,
-                                ),
-                              ),
-
-                              // Key Takeaways expandable
-                              if (isExpanded) ...[
-                                const SizedBox(height: 12),
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: WebDeckTheme.surfaceSubtle,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: WebDeckTheme.border),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Row(
-                                        children: [
-                                          Icon(Icons.lightbulb_outline, size: 15, color: WebDeckTheme.accentGreen),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            'Key Learnings & Takeaways:',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: WebDeckTheme.textPrimary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      for (final point in item.takeaways)
-                                        Padding(
-                                          padding: const EdgeInsets.only(bottom: 6),
-                                          child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Text('• ', style: TextStyle(color: WebDeckTheme.primary)),
-                                              Expanded(
-                                                child: Text(
-                                                  point,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: WebDeckTheme.textPrimary,
-                                                    height: 1.4,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
+                                const SizedBox(height: 10),
+                                Text(
+                                  _selectedCategory == 'Saved'
+                                      ? 'No saved articles yet. Bookmark feeds to read offline!'
+                                      : 'No learning feeds found for this filter.',
+                                  style: const TextStyle(
+                                    color: WebDeckTheme.textSecondary,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(20),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemBuilder: (ctx, i) {
+                          final item = filtered[i];
+                          final isBookmarked = _bookmarked.contains(item.id);
+                          final isExpanded = _expanded.contains(item.id);
 
-                              const SizedBox(height: 12),
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: WebDeckTheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: WebDeckTheme.border),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (item.imageUrl != null &&
+                                    item.imageUrl!.isNotEmpty)
+                                  _FeedMedia(
+                                    item: item,
+                                    onOpen: () => _open(item),
+                                  ),
+                                // Source & Category & Level
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: WebDeckTheme.primary.withValues(
+                                          alpha: 0.15,
+                                        ),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        item.category,
+                                        style: const TextStyle(
+                                          color: WebDeckTheme.primary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: WebDeckTheme.surfaceSubtle,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: WebDeckTheme.border,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        item.level,
+                                        style: const TextStyle(
+                                          color: WebDeckTheme.textSecondary,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '${item.readTime} · ${item.date}',
+                                      style: const TextStyle(
+                                        color: WebDeckTheme.textSecondary,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
 
-                              // Action Buttons
-                              Row(
-                                children: [
-                                  TextButton.icon(
-                                    icon: Icon(
-                                      isExpanded ? Icons.expand_less : Icons.expand_more,
-                                      size: 16,
+                                // Title
+                                GestureDetector(
+                                  onTap: () => _open(item),
+                                  child: Text(
+                                    item.title,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: WebDeckTheme.textPrimary,
+                                      height: 1.35,
                                     ),
-                                    label: Text(isExpanded ? 'Hide Notes' : 'Key Takeaways'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: WebDeckTheme.primary,
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        if (isExpanded) {
-                                          _expanded.remove(item.id);
-                                        } else {
-                                          _expanded.add(item.id);
-                                        }
-                                      });
-                                    },
                                   ),
-                                  const Spacer(),
-                                  IconButton(
-                                    icon: Icon(
-                                      isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                                      color: isBookmarked ? WebDeckTheme.accentGreen : WebDeckTheme.textSecondary,
-                                      size: 18,
-                                    ),
-                                    tooltip: isBookmarked ? 'Remove Bookmark' : 'Bookmark to Saved',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () {
-                                      setState(() {
-                                        if (isBookmarked) {
-                                          _bookmarked.remove(item.id);
-                                        } else {
-                                          _bookmarked.add(item.id);
-                                        }
-                                      });
-                                    },
+                                ),
+                                const SizedBox(height: 6),
+
+                                // Source
+                                Text(
+                                  'Source: ${item.source}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: WebDeckTheme.textSecondary,
+                                    fontStyle: FontStyle.italic,
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.open_in_new, size: 16, color: WebDeckTheme.textSecondary),
-                                    tooltip: 'Read Original Publication',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () async {
-                                      final uri = Uri.parse(item.url);
-                                      if (await canLaunchUrl(uri)) {
-                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                      }
-                                    },
+                                ),
+                                const SizedBox(height: 10),
+
+                                // Summary
+                                Text(
+                                  item.summary,
+                                  maxLines: isExpanded ? null : 4,
+                                  overflow: isExpanded
+                                      ? null
+                                      : TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: WebDeckTheme.textSecondary,
+                                    height: 1.45,
+                                  ),
+                                ),
+
+                                // Key Takeaways expandable
+                                if (isExpanded &&
+                                    item.takeaways.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: WebDeckTheme.surfaceSubtle,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: WebDeckTheme.border,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Row(
+                                          children: [
+                                            Icon(
+                                              Icons.lightbulb_outline,
+                                              size: 15,
+                                              color: WebDeckTheme.accentGreen,
+                                            ),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              'Key Learnings & Takeaways:',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: WebDeckTheme.textPrimary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        for (final point in item.takeaways)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 6,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                const Text(
+                                                  '• ',
+                                                  style: TextStyle(
+                                                    color: WebDeckTheme.primary,
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  child: Text(
+                                                    point,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: WebDeckTheme
+                                                          .textPrimary,
+                                                      height: 1.4,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+
+                                const SizedBox(height: 12),
+
+                                // Action Buttons
+                                Row(
+                                  children: [
+                                    if (item.takeaways.isEmpty)
+                                      TextButton.icon(
+                                        icon: Icon(
+                                          item.isVideo
+                                              ? Icons.play_circle_outline
+                                              : Icons.article_outlined,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          item.isVideo ? 'Watch' : 'Read',
+                                        ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: WebDeckTheme.primary,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        onPressed: () => _open(item),
+                                      )
+                                    else
+                                      TextButton.icon(
+                                        icon: Icon(
+                                          isExpanded
+                                              ? Icons.expand_less
+                                              : Icons.expand_more,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          isExpanded
+                                              ? 'Hide Notes'
+                                              : 'Key Takeaways',
+                                        ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: WebDeckTheme.primary,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            if (isExpanded) {
+                                              _expanded.remove(item.id);
+                                            } else {
+                                              _expanded.add(item.id);
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    const Spacer(),
+                                    IconButton(
+                                      icon: Icon(
+                                        isBookmarked
+                                            ? Icons.bookmark
+                                            : Icons.bookmark_border,
+                                        color: isBookmarked
+                                            ? WebDeckTheme.accentGreen
+                                            : WebDeckTheme.textSecondary,
+                                        size: 18,
+                                      ),
+                                      tooltip: isBookmarked
+                                          ? 'Remove Bookmark'
+                                          : 'Bookmark to Saved',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _toggleBookmark(item),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.open_in_new,
+                                        size: 16,
+                                        color: WebDeckTheme.textSecondary,
+                                      ),
+                                      tooltip: 'Read Original Publication',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => _open(item),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(FeedItem item) async {
+    final uri = Uri.tryParse(item.url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+/// 16:9 cover image; videos get a play badge.
+class _FeedMedia extends StatelessWidget {
+  final FeedItem item;
+  final VoidCallback onOpen;
+  const _FeedMedia({required this.item, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GestureDetector(
+        onTap: onOpen,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.network(
+                  item.imageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    color: WebDeckTheme.surfaceSubtle,
+                    child: Icon(
+                      item.isVideo
+                          ? Icons.ondemand_video
+                          : Icons.image_not_supported_outlined,
+                      color: WebDeckTheme.textSecondary,
+                    ),
+                  ),
+                  loadingBuilder: (_, child, progress) => progress == null
+                      ? child
+                      : Container(color: WebDeckTheme.surfaceSubtle),
+                ),
+                if (item.isVideo)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

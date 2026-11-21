@@ -1,7 +1,7 @@
 {
   "id": "games",
-  "name": "Game Tracker & Hidden Gems",
-  "version": "1.0.0",
+  "name": "My Game Library",
+  "version": "1.0.1",
   "description": "Track games played, playing, half played and backlog. Record store bought on (Steam, Epic, PlayStation, Xbox, Switch), access tips & tricks, walkthrough maps, trailers, and discover hidden gems. Add by name, JSON, or screenshot.",
   "category": "Games",
   "icon": "game",

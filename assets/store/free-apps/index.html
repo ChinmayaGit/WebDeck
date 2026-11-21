@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free Apps</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .wd-tabs { margin-bottom: 12px; flex-wrap: wrap; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+    .section-title { font-size: 17px; font-weight: 750; margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .section-title .wd-small { font-weight: 400; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+    .item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--wd-border); border-radius: 12px; background: var(--wd-surface); cursor: pointer; }
+    .item:hover { background: var(--wd-surface-2); }
+    .logo { width: 44px; height: 44px; border-radius: 11px; flex: none; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px; }
+    .item img.logo { object-fit: cover; background: var(--wd-surface-2); }
+    .meta { min-width: 0; flex: 1; }
+    .name { font-weight: 700; }
+    .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+    .tag { font-size: 10px; padding: 2px 6px; border-radius: 6px; background: var(--wd-surface-2); color: var(--wd-muted); }
+    .links { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="wd-app">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#16A34A;color:#fff">🎁</div>
+      <div><h1>Free Apps</h1><div class="wd-sub">Free and free-for-now apps for every device</div></div>
+      <div class="wd-spacer"></div>
+      <select class="wd-select" id="country" style="width:auto" title="Store region for charts"></select>
+    </div>
+    <div class="wd-tabs">
+      <button class="wd-tab" data-tab="deals" aria-selected="true">🎁 Giveaways & deals</button>
+      <button class="wd-tab" data-tab="top" aria-selected="false">📈 Top free</button>
+      <button class="wd-tab" data-tab="oss" aria-selected="false">🧩 Open source</button>
+      <button class="wd-tab" data-tab="subs" aria-selected="false">⭐ Subscription</button>
+    </div>
+    <div class="chips" id="platforms"></div>
+    <div id="out"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

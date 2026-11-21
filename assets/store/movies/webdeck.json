@@ -1,7 +1,7 @@
 {
   "id": "movies",
-  "name": "Movie Tracker & Recommender",
-  "version": "1.0.0",
+  "name": "My Movie Library",
+  "version": "1.0.1",
   "description": "Track movies by Watched, Watching, Half Done, and Watchlist. See streaming availability (Netflix, Prime, Disney+, Apple TV) and watch trailers. Add by name, JSON, or screenshot OCR. Get smart recommendations.",
   "category": "Video",
   "icon": "movie",

@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../data/models/installed_app.dart';
 import '../../../../runtime/app_icons.dart';
+import '../../../../runtime/shortcut_service.dart';
 import '../../../core/theme.dart';
 import '../../catalog/view_models/catalog_view_model.dart';
 import '../../catalog/views/backend_console_dialog.dart';
@@ -233,8 +234,25 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
     final controller = _controller;
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();
-    } else if (mounted) {
-      Navigator.of(context).pop();
+    } else {
+      await _close();
+    }
+  }
+
+  /// Opened from a home-screen shortcut: closing returns to the home screen,
+  /// like a native app, instead of revealing WebDeck.
+  Future<void> _close() async {
+    final standalone = ShortcutService.isStandalone(widget.app.id);
+    if (mounted) Navigator.of(context).pop();
+    if (standalone) await ShortcutService.leaveStandalone();
+  }
+
+  Future<void> _addShortcut() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      messenger.showSnackBar(SnackBar(content: Text(await ShortcutService.create(widget.app))));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: WebDeckTheme.accentRed));
     }
   }
 
@@ -285,10 +303,16 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
             icon: const Icon(Icons.dns_rounded),
             onPressed: _openBackendConsole,
           ),
+        if (ShortcutService.platformSupported)
+          IconButton(
+            tooltip: Platform.isAndroid ? 'Add to home screen' : 'Create app shortcut',
+            icon: const Icon(Icons.add_to_home_screen),
+            onPressed: _addShortcut,
+          ),
         IconButton(
           tooltip: 'Close app',
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _close,
         ),
         const SizedBox(width: 4),
       ],

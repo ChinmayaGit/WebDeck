@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Password Vault</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    :root { --pv: #6366F1; }
+    [hidden] { display: none !important; }
+    body { min-height: 100vh; }
+
+    /* ---- setup / lock */
+    .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+    .gate-card { width: 100%; max-width: 380px; text-align: center; }
+    .gate-icon { width: 72px; height: 72px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; font-size: 34px; background: linear-gradient(135deg, #818CF8, #4F46E5); }
+    .gate h1 { margin-bottom: 6px; }
+    .gate form { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+    .gate .wd-input { width: 100%; font-size: 16px; padding: 12px 14px; }
+    .gate .wd-btn { justify-content: center; padding: 12px; font-size: 15px; }
+    .seg { display: flex; background: var(--wd-surface-2); border-radius: 10px; padding: 3px; gap: 3px; }
+    .seg button { flex: 1; border: 0; background: transparent; color: var(--wd-muted); padding: 8px; border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600; }
+    .seg button.on { background: var(--wd-surface); color: var(--wd-text); }
+    .bio-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 18px auto 0; background: none; border: 0; color: var(--wd-text); cursor: pointer; font: inherit; }
+    .bio-btn span:first-child { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; border: 2px solid var(--pv); }
+    .err { color: var(--wd-red); font-size: 13px; min-height: 18px; }
+    .check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--wd-muted); cursor: pointer; }
+
+    /* ---- main */
+    .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .top .wd-icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 20px; background: var(--pv); }
+    .search { flex: 1; min-width: 160px; }
+    .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px; scrollbar-width: none; }
+    .chip { flex: none; border: 1px solid var(--wd-border); background: var(--wd-surface); color: var(--wd-text); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; font-size: 13px; white-space: nowrap; }
+    .chip.on { background: var(--pv); border-color: var(--pv); }
+    .layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
+    .list { display: flex; flex-direction: column; gap: 6px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 10px; cursor: pointer; text-align: left; color: inherit; font: inherit; width: 100%; }
+    .row:hover { border-color: var(--pv); }
+    .row.on { border-color: var(--pv); background: var(--wd-surface-2); }
+    .tico { width: 36px; height: 36px; flex: none; border-radius: 9px; display: grid; place-items: center; font-size: 18px; background: var(--wd-surface-2); }
+    .row .t { font-weight: 650; }
+    .row .s { font-size: 12px; color: var(--wd-muted); }
+    .lnk { font-size: 11px; color: var(--wd-muted); flex: none; }
+    .detail { position: sticky; top: 12px; }
+    .dhead { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .dhead .tico { width: 48px; height: 48px; font-size: 24px; }
+    .field { padding: 10px 0; border-top: 1px solid var(--wd-border); display: flex; align-items: center; gap: 8px; }
+    .field:first-child { border-top: 0; }
+    .field .lbl { font-size: 12px; color: var(--wd-muted); }
+    .field .val { font-family: var(--wd-mono); font-size: 14px; word-break: break-all; white-space: pre-wrap; }
+    .ib { border: 0; background: var(--wd-surface-2); color: var(--wd-text); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; flex: none; font-size: 14px; }
+    .ib:hover { background: var(--wd-border); }
+    .sect { margin-top: 18px; }
+    .sect h3 { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .link-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--wd-border); border-radius: 10px; margin-bottom: 6px; cursor: pointer; }
+    .link-row:hover { border-color: var(--pv); }
+    .role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #A5B4FC; }
+    .back { display: none; }
+    .empty-detail { text-align: center; padding: 48px 16px; color: var(--wd-muted); }
+
+    /* ---- dialogs */
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: grid; place-items: center; padding: 16px; z-index: 50; }
+    .sheet { width: 100%; max-width: 520px; max-height: calc(100vh - 32px); overflow-y: auto; background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; padding: 18px; }
+    .sheet h2 { margin-bottom: 14px; }
+    .sheet label.f { display: block; margin-bottom: 10px; }
+    .sheet label.f > span { display: block; font-size: 12px; color: var(--wd-muted); margin-bottom: 4px; }
+    .sheet .wd-input, .sheet textarea, .sheet select { width: 100%; }
+    .sheet textarea { min-height: 80px; resize: vertical; }
+    .pw { display: flex; gap: 6px; }
+    .pw .wd-input { flex: 1; font-family: var(--wd-mono); }
+    .types { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .types button { border: 1px solid var(--wd-border); background: var(--wd-surface-2); color: var(--wd-text); border-radius: 10px; padding: 10px 6px; cursor: pointer; font: inherit; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .types button.on { border-color: var(--pv); background: rgba(99,102,241,.18); }
+    .types button b { font-size: 20px; font-weight: normal; }
+    .custom { display: grid; grid-template-columns: 1fr 1.4fr auto auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+    .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+    .strength { height: 4px; border-radius: 2px; background: var(--wd-surface-2); margin-top: 4px; overflow: hidden; }
+    .strength i { display: block; height: 100%; width: 0; transition: width .2s, background .2s; }
+    .pick { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+
+    @media (max-width: 720px) {
+      .wd-app { padding: 16px 16px 40px; }
+      .layout { grid-template-columns: 1fr; }
+      .layout.showing .list-pane { display: none; }
+      .layout:not(.showing) .detail { display: none; }
+      .detail { position: static; }
+      .back { display: inline-flex; }
+      .custom { grid-template-columns: 1fr 1fr auto auto; }
+      .top .hide-sm { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- First run: create the master key -->
+  <section id="setup" class="gate" hidden>
+    <div class="gate-card">
+      <div class="gate-icon">🔐</div>
+      <h1>Create your vault</h1>
+      <p class="wd-muted">Everything is encrypted on this device with a key only you know. If you forget it, the vault cannot be recovered.</p>
+      <form id="setupForm" autocomplete="off">
+        <div class="seg" id="setupKind">
+          <button type="button" data-kind="pin" class="on">Numeric PIN</button>
+          <button type="button" data-kind="password">Password</button>
+        </div>
+        <input class="wd-input" id="setupKey" type="password" inputmode="numeric" placeholder="New PIN (at least 6 digits)" autocomplete="new-password">
+        <input class="wd-input" id="setupKey2" type="password" inputmode="numeric" placeholder="Repeat PIN" autocomplete="new-password">
+        <label class="check" id="setupBioWrap" hidden><input type="checkbox" id="setupBio" checked> Also unlock with fingerprint / face</label>
+        <div class="err" id="setupErr"></div>
+        <button class="wd-btn wd-btn-primary" type="submit">Create vault</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Locked -->
+  <section id="lock" class="gate" hidden>
+    <div class="gate-card">
+      <div class="gate-icon">🔒</div>
+      <h1>Password Vault</h1>
+      <p class="wd-muted" id="lockHint">Enter your master key to unlock</p>
+      <form id="lockForm" autocomplete="off">
+        <input class="wd-input" id="lockKey" type="password" placeholder="Master key" autocomplete="current-password">
+        <div class="err" id="lockErr"></div>
+        <button class="wd-btn wd-btn-primary" type="submit" id="lockBtn">Unlock</button>
+      </form>
+      <button class="bio-btn" id="bioBtn" hidden><span>👆</span><span class="wd-small wd-muted">Unlock with fingerprint</span></button>
+    </div>
+  </section>
+
+  <!-- Unlocked -->
+  <section id="main" hidden>
+    <div class="wd-app" style="max-width:1100px">
+      <div class="top">
+        <div class="wd-icon">🔐</div>
+        <h1 class="hide-sm">Vault</h1>
+        <input class="wd-input search" id="search" type="search" placeholder="Search vault…" autocomplete="off">
+        <button class="wd-btn wd-btn-primary" id="addBtn">+ Add</button>
+        <button class="wd-btn" id="settingsBtn" title="Settings">⚙</button>
+        <button class="wd-btn" id="lockNow" title="Lock now">🔒</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="layout" id="layout">
+        <div class="list-pane"><div class="list" id="list"></div></div>
+        <div class="detail wd-card" id="detail"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="modal" class="modal" hidden><div class="sheet" id="sheet"></div></div>
+
+  <script src="/__webdeck/sdk.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

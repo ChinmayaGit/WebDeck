@@ -194,7 +194,7 @@ class _JobsTab extends StatelessWidget {
     final scheduler = context.watch<JobScheduler>();
     final settings = context.watch<SettingsService>();
     if (apps.isEmpty) {
-      return const _Empty(Icons.schedule, 'No installed app runs background checks.\nTry Price Tracker or Free Games from the Store.');
+      return const _Empty(Icons.schedule, 'No installed app runs background checks.\nTry Shop Price Tracker or Free Game Giveaways from the Store.');
     }
     return ListView(
       padding: const EdgeInsets.all(16),

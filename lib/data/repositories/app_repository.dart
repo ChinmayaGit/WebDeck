@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import '../models/backend_requirement.dart';
 import '../models/install_progress.dart';
@@ -112,8 +113,58 @@ class AppRepository {
     return false;
   }
 
+  /// Saves a website as a "web shortcut" that opens in WebDeck's browser view.
+  /// [iconPng] is used when the site has no usable icon.
+  Future<InstalledApp> addWebShortcut({
+    required String name,
+    required String url,
+    required List<int> fallbackIconPng,
+  }) async {
+    var uri = Uri.tryParse(url.trim());
+    if (uri != null && !uri.hasScheme) uri = Uri.tryParse('https://${url.trim()}');
+    if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https') || uri.host.isEmpty) {
+      throw const FormatException('Enter a website address like https://example.com');
+    }
+    final slug = uri.host.replaceAll(RegExp(r'^www\.'), '').replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    final id = 'web-$slug-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+
+    final iconsDir = Directory(p.join((await _storageService.getAppsDirectory()).path, '_shortcut_icons'));
+    await iconsDir.create(recursive: true);
+    final iconFile = File(p.join(iconsDir.path, '$id.png'));
+    List<int> icon = fallbackIconPng;
+    for (final path in ['/apple-touch-icon.png', '/apple-touch-icon-precomposed.png', '/favicon.ico']) {
+      try {
+        final res = await http.get(uri.replace(path: path, query: null, fragment: null)).timeout(const Duration(seconds: 6));
+        final type = res.headers['content-type'] ?? '';
+        if (res.statusCode == 200 && res.bodyBytes.length > 200 && type.startsWith('image/')) {
+          icon = res.bodyBytes;
+          break;
+        }
+      } catch (_) {}
+    }
+    await iconFile.writeAsBytes(icon, flush: true);
+
+    final app = InstalledApp(
+      id: id,
+      name: name.trim().isEmpty ? uri.host : name.trim(),
+      description: uri.toString(),
+      version: '1.0',
+      repoUrl: uri.toString(),
+      localIconPath: iconFile.path,
+      installedPath: '',
+      entryHtml: uri.toString(),
+      framework: 'Web Shortcut',
+      installedAt: DateTime.now(),
+      sizeBytes: 0,
+      source: 'shortcut',
+    );
+    await _storageService.saveOrUpdateApp(app);
+    return app;
+  }
+
   /// Checks if an app has or needs backend requirements detection
   Future<BackendRequirement?> resolveBackendRequirement(InstalledApp app) async {
+    if (app.isWebShortcut) return null;
     // Runtime apps never ship their own backend: WebDeck is their backend.
     if (app.isRuntimeApp) return null;
     final targetDir = Directory(app.installedPath);

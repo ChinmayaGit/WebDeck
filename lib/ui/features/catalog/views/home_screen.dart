@@ -12,6 +12,8 @@ import '../../../../runtime/settings_service.dart';
 import '../../shell/app_launcher.dart';
 import '../../player/views/webview_player_screen.dart';
 import '../view_models/catalog_view_model.dart';
+import '../../store/extension_builder_sheet.dart';
+import 'add_shortcut_dialog.dart';
 import 'app_card.dart';
 import 'install_dialog.dart';
 import 'backend_console_dialog.dart';
@@ -37,6 +39,10 @@ class HomeScreen extends StatelessWidget {
     CatalogViewModel viewModel,
     InstalledApp app,
   ) async {
+    if (app.isWebShortcut) {
+      await openWebShortcut(context, app);
+      return;
+    }
     // Check if app has companion backend or database requirements
     final req = await viewModel.resolveBackendRequirement(app);
     final effectiveApp = req != null
@@ -176,6 +182,13 @@ class HomeScreen extends StatelessWidget {
     CatalogViewModel viewModel,
     InstalledApp app,
   ) async {
+    if (app.isWebShortcut) {
+      await launchUrl(
+        Uri.parse(app.repoUrl),
+        mode: LaunchMode.externalApplication,
+      );
+      return;
+    }
     final req = await viewModel.resolveBackendRequirement(app);
     final effectiveApp = req != null && app.backendRequirement == null
         ? app.copyWith(backendRequirement: req)
@@ -256,6 +269,16 @@ class HomeScreen extends StatelessWidget {
     CatalogViewModel viewModel,
     InstalledApp app,
   ) async {
+    if (app.isWebShortcut) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Web shortcuts always open the live site, so there is nothing to update.',
+          ),
+        ),
+      );
+      return;
+    }
     final success = await viewModel.checkAndUpdateApp(app.id);
     if (context.mounted) {
       if (success) {
@@ -402,6 +425,7 @@ class HomeScreen extends StatelessWidget {
         //   ],
         // ),
         actions: [
+          _FilterMenu(viewModel: viewModel),
           // Backup & Restore Popup Menu
           PopupMenuButton<String>(
             tooltip: 'Backup & Restore',
@@ -444,37 +468,19 @@ class HomeScreen extends StatelessWidget {
               icon: const Icon(Icons.sports_esports, size: 20),
             ),
           const SizedBox(width: 4),
-          if (!devMode)
-            MediaQuery.sizeOf(context).width < 480
-                ? IconButton.filled(
-                    tooltip: 'Get Apps',
-                    onPressed: () => context.read<ShellNavigation>().value =
-                        ShellNavigation.store,
-                    icon: const Icon(Icons.storefront, size: 18),
-                  )
-                : ElevatedButton.icon(
-                    onPressed: () => context.read<ShellNavigation>().value =
-                        ShellNavigation.store,
-                    icon: const Icon(Icons.storefront, size: 18),
-                    label: const Text('Get Apps'),
-                  )
-          else
-            Builder(
-              builder: (ctx) {
-                final isSmall = MediaQuery.sizeOf(ctx).width < 480;
-                return isSmall
-                    ? IconButton.filled(
-                        tooltip: 'Install App',
-                        onPressed: () => _showInstallDialog(context, viewModel),
-                        icon: const Icon(Icons.add, size: 18),
-                      )
-                    : ElevatedButton.icon(
-                        onPressed: () => _showInstallDialog(context, viewModel),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Install App'),
-                      );
-              },
-            ),
+          _AddMenu(
+            onStore: () =>
+                context.read<ShellNavigation>().value = ShellNavigation.store,
+            onShortcut: () async {
+              final app = await showAddWebShortcutDialog(context, viewModel);
+              if (app != null && context.mounted) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Added ${app.name}')));
+              }
+            },
+            onWebApp: () => _showInstallDialog(context, viewModel),
+            onBuild: () => showExtensionBuilder(context),
+          ),
           const SizedBox(width: 12),
         ],
       ),
@@ -619,82 +625,6 @@ class HomeScreen extends StatelessWidget {
             },
           ),
 
-          // Filters Bar: Framework Chips + Running Toggle
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            decoration: const BoxDecoration(
-              color: WebDeckTheme.surfaceSubtle,
-              border: Border(bottom: BorderSide(color: WebDeckTheme.border)),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  // Running Only Filter Chip
-                  FilterChip(
-                    label: Text('Running (${viewModel.runningCount})'),
-                    selected: viewModel.onlyRunning,
-                    onSelected: (_) => viewModel.toggleOnlyRunning(),
-                    avatar: Icon(
-                      Icons.circle,
-                      size: 10,
-                      color: viewModel.runningCount > 0
-                          ? WebDeckTheme.accentGreen
-                          : WebDeckTheme.textSecondary,
-                    ),
-                    backgroundColor: WebDeckTheme.surface,
-                    selectedColor: WebDeckTheme.accentGreen.withValues(
-                      alpha: 0.25,
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      color: viewModel.onlyRunning
-                          ? WebDeckTheme.accentGreen
-                          : WebDeckTheme.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    side: BorderSide(
-                      color: viewModel.onlyRunning
-                          ? WebDeckTheme.accentGreen
-                          : WebDeckTheme.border,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // Framework Filter Chips
-                  for (final fw in viewModel.availableFrameworks) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: FilterChip(
-                        label: Text(fw),
-                        selected: (viewModel.selectedFramework ?? 'All') == fw,
-                        onSelected: (selected) {
-                          viewModel.setSelectedFramework(selected ? fw : 'All');
-                        },
-                        backgroundColor: WebDeckTheme.surface,
-                        selectedColor: WebDeckTheme.primary.withValues(
-                          alpha: 0.25,
-                        ),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          color: (viewModel.selectedFramework ?? 'All') == fw
-                              ? WebDeckTheme.primary
-                              : WebDeckTheme.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        side: BorderSide(
-                          color: (viewModel.selectedFramework ?? 'All') == fw
-                              ? WebDeckTheme.primary
-                              : WebDeckTheme.border,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
           // Main View (Grid, List, or Icon-Only)
           Expanded(
             child: viewModel.isLoading
@@ -790,6 +720,21 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  AppMenuActions _menuFor(
+    BuildContext context,
+    CatalogViewModel viewModel,
+    InstalledApp app,
+  ) => AppMenuActions(
+    app: app,
+    isRunning: viewModel.isAppRunning(app.id),
+    onStop: () => viewModel.stopApp(app.id),
+    onUninstall: () => _confirmUninstall(context, viewModel, app),
+    onOpenBrowser: () => _openInExternalBrowser(context, viewModel, app),
+    onUpdateIcon: () => _onUpdateIcon(context, viewModel, app),
+    onCheckUpdate: () => _onCheckUpdate(context, viewModel, app),
+    onBackendConsole: () => _openBackendConsole(context, viewModel, app),
+  );
+
   Widget _buildListView(
     BuildContext context,
     CatalogViewModel viewModel,
@@ -804,197 +749,215 @@ class HomeScreen extends StatelessWidget {
         final isRunning = viewModel.isAppRunning(app.id);
         final hasIcon =
             app.localIconPath != null && File(app.localIconPath!).existsSync();
+        final menu = _menuFor(context, viewModel, app);
 
-        return Card(
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 8,
-            ),
-            leading: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: WebDeckTheme.surfaceSubtle,
-                border: Border.all(color: WebDeckTheme.border),
+        return AppMenuRegion(
+          actions: menu,
+          child: Card(
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
               ),
-              child: hasIcon
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.file(
-                        File(app.localIconPath!),
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset(
-                        'assets/icons/app_icon.png',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Center(
-                          child: Text(
-                            app.name.isNotEmpty
-                                ? app.name[0].toUpperCase()
-                                : 'W',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
+              leading: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: WebDeckTheme.surfaceSubtle,
+                  border: Border.all(color: WebDeckTheme.border),
+                ),
+                child: hasIcon
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.file(
+                          File(app.localIconPath!),
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          'assets/icons/app_icon.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Center(
+                            child: Text(
+                              app.name.isNotEmpty
+                                  ? app.name[0].toUpperCase()
+                                  : 'W',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-            ),
-            title: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    app.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: WebDeckTheme.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: WebDeckTheme.border),
-                  ),
-                  child: Text(
-                    app.framework,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: WebDeckTheme.primary,
-                      fontWeight: FontWeight.w600,
+              ),
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      app.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-                if (app.backendRequirement?.hasRequirements == true) ...[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD29922).withValues(alpha: 0.15),
+                      color: WebDeckTheme.surfaceSubtle,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFFD29922).withValues(alpha: 0.35),
+                      border: Border.all(color: WebDeckTheme.border),
+                    ),
+                    child: Text(
+                      app.framework,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: WebDeckTheme.primary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          app.backendRequirement!.requiresDotnet
-                              ? Icons.dns
-                              : (app.backendRequirement!.requiresPython
-                                    ? Icons.terminal
-                                    : Icons.storage),
-                          size: 10,
-                          color: const Color(0xFFD29922),
+                  ),
+                  if (app.backendRequirement?.hasRequirements == true) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD29922).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: const Color(0xFFD29922)
+                              .withValues(alpha: 0.35),
                         ),
-                        const SizedBox(width: 3),
-                        Text(
-                          app.backendRequirement!.runtimeBadgeLabel,
-                          style: const TextStyle(
-                            fontSize: 9,
-                            color: Color(0xFFD29922),
-                            fontWeight: FontWeight.w700,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            app.backendRequirement!.requiresDotnet
+                                ? Icons.dns
+                                : (app.backendRequirement!.requiresPython
+                                      ? Icons.terminal
+                                      : Icons.storage),
+                            size: 10,
+                            color: const Color(0xFFD29922),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            app.backendRequirement!.runtimeBadgeLabel,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: Color(0xFFD29922),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (isRunning) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: WebDeckTheme.accentGreen.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: WebDeckTheme.accentGreen.withValues(
+                            alpha: 0.4,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (isRunning) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: WebDeckTheme.accentGreen.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: WebDeckTheme.accentGreen.withValues(alpha: 0.4),
+                      ),
+                      child: const Text(
+                        'RUNNING',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: WebDeckTheme.accentGreen,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                    child: const Text(
-                      'RUNNING',
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: WebDeckTheme.accentGreen,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  ],
                 ],
-              ],
-            ),
-            subtitle: Text(
-              app.description.isNotEmpty
-                  ? app.description
-                  : 'Version ${app.version}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                color: WebDeckTheme.textSecondary,
               ),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isRunning) ...[
-                  IconButton(
-                    icon: const Icon(
-                      Icons.stop_rounded,
-                      color: WebDeckTheme.accentRed,
-                      size: 20,
+              subtitle: Text(
+                app.description.isNotEmpty
+                    ? app.description
+                    : 'Version ${app.version}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: WebDeckTheme.textSecondary,
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isRunning) ...[
+                    IconButton(
+                      icon: const Icon(
+                        Icons.stop_rounded,
+                        color: WebDeckTheme.accentRed,
+                        size: 20,
+                      ),
+                      tooltip: 'Stop Server',
+                      onPressed: () => viewModel.stopApp(app.id),
                     ),
-                    tooltip: 'Stop Server',
-                    onPressed: () => viewModel.stopApp(app.id),
+                  ],
+                  IconButton(
+                    icon: const Icon(Icons.open_in_browser, size: 20),
+                    tooltip: 'Open in Browser',
+                    onPressed: () =>
+                        _openInExternalBrowser(context, viewModel, app),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _launchApp(context, viewModel, app),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isRunning
+                          ? WebDeckTheme.accentGreen
+                          : WebDeckTheme.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    icon: Icon(
+                      isRunning ? Icons.play_arrow : Icons.rocket_launch,
+                      size: 14,
+                    ),
+                    label: Text(
+                      isRunning ? 'Play' : 'Launch',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    icon: const Icon(
+                      Icons.more_vert,
+                      size: 20,
+                      color: WebDeckTheme.textSecondary,
+                    ),
+                    color: WebDeckTheme.surface,
+                    onSelected: (v) => menu.handle(context, v),
+                    itemBuilder: (_) => menu.items(),
                   ),
                 ],
-                IconButton(
-                  icon: const Icon(Icons.open_in_browser, size: 20),
-                  tooltip: 'Open in Browser',
-                  onPressed: () =>
-                      _openInExternalBrowser(context, viewModel, app),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => _launchApp(context, viewModel, app),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isRunning
-                        ? WebDeckTheme.accentGreen
-                        : WebDeckTheme.primary,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  icon: Icon(
-                    isRunning ? Icons.play_arrow : Icons.rocket_launch,
-                    size: 14,
-                  ),
-                  label: Text(
-                    isRunning ? 'Play' : 'Launch',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -1027,100 +990,103 @@ class HomeScreen extends StatelessWidget {
                 app.localIconPath != null &&
                 File(app.localIconPath!).existsSync();
 
-            return InkWell(
-              onTap: () => _launchApp(context, viewModel, app),
-              borderRadius: BorderRadius.circular(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1F6FEB), Color(0xFF8957E5)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+            return AppMenuRegion(
+              actions: _menuFor(context, viewModel, app),
+              child: InkWell(
+                onTap: () => _launchApp(context, viewModel, app),
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Stack(
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF1F6FEB), Color(0xFF8957E5)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
-                          ],
-                        ),
-                        child: hasIcon
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: Image.file(
-                                  File(app.localIconPath!),
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: Image.asset(
-                                  'assets/icons/app_icon.png',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Center(
-                                        child: Text(
-                                          app.name.isNotEmpty
-                                              ? app.name[0].toUpperCase()
-                                              : 'W',
-                                          style: const TextStyle(
-                                            fontSize: 32,
-                                            fontWeight: FontWeight.w800,
-                                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: hasIcon
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Image.file(
+                                    File(app.localIconPath!),
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : ClipRRect(
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Image.asset(
+                                    'assets/icons/app_icon.png',
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) => Center(
+                                          child: Text(
+                                            app.name.isNotEmpty
+                                                ? app.name[0].toUpperCase()
+                                                : 'W',
+                                            style: const TextStyle(
+                                              fontSize: 32,
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ),
-                                      ),
+                                  ),
                                 ),
-                              ),
-                      ),
-                      if (isRunning)
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              color: WebDeckTheme.accentGreen,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: WebDeckTheme.surface,
-                                width: 2,
+                        ),
+                        if (isRunning)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: WebDeckTheme.accentGreen,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: WebDeckTheme.surface,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    app.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: WebDeckTheme.textPrimary,
+                      ],
                     ),
-                  ),
-                  Text(
-                    app.framework,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: WebDeckTheme.textSecondary,
+                    const SizedBox(height: 8),
+                    Text(
+                      app.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: WebDeckTheme.textPrimary,
+                      ),
                     ),
-                  ),
-                ],
+                    Text(
+                      app.framework,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: WebDeckTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -1207,6 +1173,179 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// App-bar filter: everything, what's running, or one kind of app.
+class _FilterMenu extends StatelessWidget {
+  final CatalogViewModel viewModel;
+  const _FilterMenu({required this.viewModel});
+
+  static const _items = [
+    (HomeFilter.all, Icons.apps_rounded, 'All'),
+    (HomeFilter.running, Icons.play_circle_outline, 'Running'),
+    (HomeFilter.extensions, Icons.extension_outlined, 'Extensions'),
+    (HomeFilter.webApps, Icons.web_rounded, 'Web apps'),
+    (HomeFilter.shortcuts, Icons.bookmark_border_rounded, 'Web shortcuts'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _items.firstWhere((i) => i.$1 == viewModel.filter);
+    final narrow = MediaQuery.sizeOf(context).width < 480;
+    return PopupMenuButton<HomeFilter>(
+      tooltip: 'Show',
+      color: WebDeckTheme.surface,
+      initialValue: viewModel.filter,
+      onSelected: viewModel.setFilter,
+      itemBuilder: (_) => [
+        for (final (f, icon, label) in _items)
+          PopupMenuItem(
+            value: f,
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: f == viewModel.filter ? WebDeckTheme.primary : null,
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Text(label)),
+                const SizedBox(width: 16),
+                Text(
+                  '${viewModel.countFor(f)}',
+                  style: const TextStyle(
+                    color: WebDeckTheme.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: viewModel.filter == HomeFilter.all
+              ? WebDeckTheme.surfaceSubtle
+              : WebDeckTheme.primary.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: WebDeckTheme.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(current.$2, size: 18),
+            if (!narrow) ...[
+              const SizedBox(width: 6),
+              Text(
+                '${current.$3} (${viewModel.countFor(current.$1)})',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+            const Icon(Icons.arrow_drop_down, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Add" button: get extensions, add a web shortcut, install a web app, or build an extension.
+class _AddMenu extends StatelessWidget {
+  final VoidCallback onStore;
+  final VoidCallback onShortcut;
+  final VoidCallback onWebApp;
+  final VoidCallback onBuild;
+
+  const _AddMenu({
+    required this.onStore,
+    required this.onShortcut,
+    required this.onWebApp,
+    required this.onBuild,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 480;
+    PopupMenuItem<VoidCallback> item(
+      VoidCallback value,
+      IconData icon,
+      String title,
+      String subtitle,
+    ) => PopupMenuItem(
+      value: value,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+      ),
+    );
+    return PopupMenuButton<VoidCallback>(
+      tooltip: 'Add',
+      color: WebDeckTheme.surface,
+      onSelected: (cb) => cb(),
+      itemBuilder: (_) => [
+        item(
+          onStore,
+          Icons.storefront,
+          'Get extensions',
+          'Browse the WebDeck Store',
+        ),
+        item(
+          onShortcut,
+          Icons.bookmark_add_outlined,
+          'Add web shortcut',
+          'Open any website like an app',
+        ),
+        item(
+          onWebApp,
+          Icons.web_rounded,
+          'Install web app',
+          'From GitHub, a zip or a folder',
+        ),
+        item(
+          onBuild,
+          Icons.extension_outlined,
+          'Build an extension',
+          'Guide, template and AI skill',
+        ),
+      ],
+      child: narrow
+          ? const Padding(
+              padding: EdgeInsets.all(8),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: WebDeckTheme.primary,
+                child: Icon(Icons.add, size: 18, color: Colors.white),
+              ),
+            )
+          : Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: WebDeckTheme.primary,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 18, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text(
+                    'Add',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

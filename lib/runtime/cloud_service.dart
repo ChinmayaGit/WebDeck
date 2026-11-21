@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -61,7 +62,39 @@ class CloudService extends ChangeNotifier {
   bool get ready => _client?.auth.currentUser != null;
   String? get userId => _client?.auth.currentUser?.id;
 
-  /// Connects and signs in (once). Safe to call repeatedly.
+  /// Signed in with a real (email) account, not anonymously.
+  bool get hasAccount {
+    final u = _client?.auth.currentUser;
+    return u != null && !u.isAnonymous;
+  }
+
+  String? get email => _client?.auth.currentUser?.email;
+
+  Future<void>? _initializing;
+  StreamSubscription<AuthState>? _authSub;
+  String? _setUpFor; // user id the profile/subscription were loaded for
+
+  /// Loads Supabase and any saved session, without signing in. Fast; used by
+  /// the login gate to decide whether to show the login page.
+  Future<void> init() => _initializing ??= () async {
+        try {
+          _client = Supabase.instance.client;
+        } catch (_) {
+          await Supabase.initialize(url: CloudConfig.url, publishableKey: CloudConfig.publishableKey);
+          _client = Supabase.instance.client;
+        }
+        _authSub ??= _client!.auth.onAuthStateChange.listen((state) {
+          // Another account signed in (or out): reload everything for that user.
+          final id = state.session?.user.id;
+          if (id != null && id != _setUpFor) unawaited(_setUpUser());
+          notifyListeners();
+        });
+      }().catchError((Object e) {
+        _initializing = null;
+        throw e;
+      });
+
+  /// Connects and makes sure there is a session (anonymous if needed). Safe to call repeatedly.
   Future<void> start() => _starting ??= _start().whenComplete(() {
         if (!ready) _starting = null; // allow retry after a failure
       });
@@ -69,22 +102,12 @@ class CloudService extends ChangeNotifier {
   Future<void> _start() async {
     lastError = null;
     try {
-      try {
-        _client = Supabase.instance.client;
-      } catch (_) {
-        await Supabase.initialize(url: CloudConfig.url, publishableKey: CloudConfig.publishableKey);
-        _client = Supabase.instance.client;
-      }
+      await init();
       final auth = _client!.auth;
       if (auth.currentUser == null) {
         await auth.signInAnonymously();
       }
-      await _loadProfile();
-      _subscribe();
-      await _fetchPending();
-      _heartbeat?.cancel();
-      _heartbeat = Timer.periodic(_heartbeatEvery, (_) => _touch());
-      unawaited(_touch());
+      await _setUpUser();
     } on AuthException catch (e) {
       lastError = e.message.contains('Anonymous')
           ? 'Cloud sign-in is turned off for this project (enable anonymous sign-ins in Supabase).'
@@ -93,6 +116,66 @@ class CloudService extends ChangeNotifier {
       lastError = 'Cloud is unreachable: $e';
     }
     notifyListeners();
+  }
+
+  Future<void> _setUpUser() async {
+    final id = _client?.auth.currentUser?.id;
+    if (id == null) return;
+    _setUpFor = id;
+    profile = null;
+    await _loadProfile();
+    _subscribe();
+    await _fetchPending();
+    _heartbeat?.cancel();
+    _heartbeat = Timer.periodic(_heartbeatEvery, (_) => _touch());
+    unawaited(_touch());
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------- accounts
+
+  /// Signs in to an existing account.
+  Future<void> signIn(String email, String password) async {
+    await init();
+    await _client!.auth.signInWithPassword(email: email.trim(), password: password);
+    _starting = Future.value();
+    await _setUpUser();
+  }
+
+  /// Creates an account. When the device is signed in anonymously, the anonymous
+  /// account is upgraded in place so its number and data carry over.
+  /// Returns true when the account is ready, false when the email must be confirmed first.
+  Future<bool> signUp(String email, String password) async {
+    await init();
+    final auth = _client!.auth;
+    final current = auth.currentUser;
+    if (current != null && current.isAnonymous) {
+      final res = await auth.updateUser(UserAttributes(email: email.trim(), password: password));
+      final upgraded = res.user != null && !res.user!.isAnonymous && res.user!.email == email.trim();
+      notifyListeners();
+      return upgraded;
+    }
+    final res = await auth.signUp(email: email.trim(), password: password);
+    if (res.session == null) return false; // confirmation email sent
+    _starting = Future.value();
+    await _setUpUser();
+    return true;
+  }
+
+  Future<void> resetPassword(String email) async {
+    await init();
+    await _client!.auth.resetPasswordForEmail(email.trim());
+  }
+
+  /// Signs out of the account; the device continues anonymously.
+  Future<void> signOut() async {
+    await init();
+    await _client!.auth.signOut();
+    profile = null;
+    _setUpFor = null;
+    _starting = null;
+    notifyListeners();
+    await start();
   }
 
   SupabaseClient _require() {
@@ -171,6 +254,77 @@ class CloudService extends ChangeNotifier {
     final rows = await c.rpc('lookup_number', params: {'p_number': number}) as List;
     return rows.isEmpty ? null : (rows.first as Map).cast<String, dynamic>();
   }
+
+  // ------------------------------------------------------------- ICE / TURN
+
+  Map<String, dynamic>? _ice;
+  DateTime? _iceExpires;
+
+  /// STUN/TURN servers for WebRTC. TURN credentials come from the
+  /// `turn-credentials` Edge Function and are cached until shortly before expiry.
+  Future<Map<String, dynamic>> iceServers() async {
+    if (_ice != null && _iceExpires != null && DateTime.now().isBefore(_iceExpires!)) return _ice!;
+    final c = _require();
+    final res = await c.functions.invoke('turn-credentials');
+    final data = (res.data as Map).cast<String, dynamic>();
+    _ice = data;
+    final ttl = (data['ttl'] as num?)?.toInt() ?? 0;
+    _iceExpires = DateTime.now().add(Duration(seconds: data['relay'] == true ? (ttl - 600).clamp(60, 86400) : 300));
+    return data;
+  }
+
+  // ----------------------------------------------------- community store
+
+  static const _bucket = 'submissions';
+
+  /// Uploads an extension zip for review. It is listed only after the owner
+  /// approves it in the Supabase dashboard.
+  Future<Map<String, dynamic>> submitExtension({
+    required Uint8List zip,
+    required Map<String, dynamic> manifest,
+  }) async {
+    final c = _require();
+    final id = manifest['id'] as String;
+    final version = manifest['version'] as String;
+    final path = '${c.auth.currentUser!.id}/$id-$version-${DateTime.now().millisecondsSinceEpoch}.zip';
+    await c.storage.from(_bucket).uploadBinary(
+          path,
+          zip,
+          fileOptions: const FileOptions(contentType: 'application/zip', upsert: false),
+        );
+    try {
+      return await c
+          .from('store_submissions')
+          .insert({
+            'app_id': id,
+            'name': manifest['name'],
+            'version': version,
+            'manifest': manifest,
+            'file_path': path,
+            'sha256': sha256.convert(zip).toString(),
+            'size_bytes': zip.length,
+          })
+          .select()
+          .single();
+    } on PostgrestException catch (e) {
+      throw CloudException(e.code == '23505' ? 'id_taken' : 'submit_failed', e.message);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> mySubmissions() async {
+    final c = _require();
+    final rows = await c.from('store_submissions').select().order('created_at', ascending: false).limit(50);
+    return rows.cast<Map<String, dynamic>>();
+  }
+
+  /// Approved community extensions (newest version of each).
+  Future<List<Map<String, dynamic>>> communityListings() async {
+    final c = _require();
+    final rows = await c.rpc('community_listings') as List;
+    return rows.cast<Map>().map((r) => r.cast<String, dynamic>()).toList();
+  }
+
+  Future<Uint8List> downloadSubmission(String path) => _require().storage.from(_bucket).download(path);
 
   // --------------------------------------------------------------- signaling
 
@@ -252,6 +406,7 @@ class CloudService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _heartbeat?.cancel();
     final ch = _channel;
     if (ch != null) unawaited(_client?.removeChannel(ch));

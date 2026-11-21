@@ -382,6 +382,8 @@
   let callIsVideo = false;
   let callRole = null; // 'caller' | 'callee'
 
+  let currentIce = null;
+  let relayAvailable = false;
   const ICE_SERVERS = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'stun:stun.cloudflare.com:3478' },
@@ -391,6 +393,18 @@
   const viaOf = (peerKey) => (String(peerKey || '').startsWith('cloud:') ? 'cloud' : 'link');
   const idOf = (peerKey) => String(peerKey || '').replace(/^(cloud|link):/, '');
   const transportLabel = (peerKey) => (viaOf(peerKey) === 'cloud' ? 'Internet' : 'Wi-Fi');
+
+  // Relay (TURN) servers let calls work through strict routers and mobile data.
+  async function refreshIce() {
+    if (!wd || !wd.cloud || !cloudOk) return;
+    try {
+      const r = await wd.cloud.iceServers();
+      if (r && Array.isArray(r.iceServers) && r.iceServers.length) {
+        currentIce = r.iceServers;
+        relayAvailable = r.relay === true;
+      }
+    } catch (_) {}
+  }
 
   function sendSignal(peerKey, payload) {
     const msg = { ...payload, ts: Date.now() };
@@ -546,7 +560,7 @@
 
   function createPeerConnection(peerId) {
     closePeerConnection();
-    pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pc = new RTCPeerConnection({ iceServers: currentIce || ICE_SERVERS });
     pendingRemoteCandidates = [];
     pc.onicecandidate = (e) => {
       if (e.candidate && activeCallId) {
@@ -567,7 +581,17 @@
       if (!pc) return;
       const st = pc.connectionState;
       if (st === 'connected') {
-        $('callHudTransport').textContent = `${transportLabel(activeCallPeerId)} P2P · encrypted`;
+        $('callHudTransport').textContent = `${transportLabel(activeCallPeerId)} · encrypted`;
+        pc.getStats().then((stats) => {
+          stats.forEach((r) => {
+            if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') {
+              const local = stats.get(r.localCandidateId);
+              if (local && local.candidateType === 'relay') {
+                $('callHudTransport').textContent = `${transportLabel(activeCallPeerId)} · relayed · encrypted`;
+              }
+            }
+          });
+        }).catch(() => {});
         $('callHudStats').textContent = callIsVideo ? 'Opus / video' : 'Opus audio';
         if (!callTimer) {
           $('callWithText').textContent = $('callWithText').textContent.replace(/^Calling |…$/g, '');
@@ -575,7 +599,9 @@
           startVisualizer();
         }
       } else if (st === 'failed') {
-        endCall('Connection failed. The networks may block direct calls (a relay server is needed).');
+        endCall(relayAvailable
+          ? 'Connection failed. Check both devices are online and try again.'
+          : 'Connection failed. The networks may block direct calls (a relay server is needed).');
       }
     };
     if (localStream) localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
@@ -750,6 +776,7 @@
       }
     }
 
+    await refreshIce();
     // Ask for the mic first so the permission prompt happens before ringing.
     try {
       await getLocalMedia(isVideo);
@@ -893,6 +920,7 @@
       return;
     }
 
+    await refreshIce();
     try {
       await getLocalMedia(isVideo);
     } catch (e) {
@@ -1254,8 +1282,22 @@
     $('btnSaveProfile').onclick = saveProfileFromModal;
     $('btnCancelModal').onclick = closeEditModal;
 
+    // Relay notice: shown until dismissed (comes back after 7 days).
+    try {
+      const hiddenUntil = Number(localStorage.getItem('wd_relay_banner_hidden_until') || 0);
+      $('relayBanner').hidden = Date.now() < hiddenUntil;
+    } catch (_) { $('relayBanner').hidden = false; }
+    $('btnDismissBanner').onclick = () => {
+      $('relayBanner').hidden = true;
+      try { localStorage.setItem('wd_relay_banner_hidden_until', String(Date.now() + 7 * 864e5)); } catch (_) {}
+    };
+
     document.querySelectorAll('.transport-chip').forEach(c => {
       c.onclick = () => {
+        if (c.classList.contains('soon')) {
+          wd.ui.toast(`${c.title}`, 'ok');
+          return;
+        }
         document.querySelectorAll('.transport-chip').forEach(x => x.classList.remove('active'));
         c.classList.add('active');
         activeTransport = c.dataset.transport;

@@ -173,6 +173,22 @@
     /** Requires "notify". */
     notify: (title, body, opts) => call('notify', Object.assign({ title, body: body || '' }, opts || {})),
 
+    /**
+     * Device lock: fingerprint / Face ID / Touch ID / Windows Hello. Always available.
+     * Secrets are private to this app and only returned after a successful biometric check.
+     */
+    auth: {
+      /** { biometric: bool } */
+      status: () => call('auth.status'),
+      /** Shows the system prompt; resolves true when the user passed. */
+      verify: (reason) => call('auth.verify', { reason }),
+      /** Stores a string after a biometric check (pass null to delete, no prompt). */
+      setSecret: (key, value, reason) => call('auth.setSecret', { key, value: value == null ? null : String(value), reason }),
+      hasSecret: (key) => call('auth.hasSecret', { key }),
+      /** Prompts for biometrics, then resolves with the stored string (or null if none). */
+      getSecret: (key, reason) => call('auth.getSecret', { key, reason }),
+    },
+
     /** Opens an http(s) link in the system browser. */
     openUrl: (url) => call('system.openUrl', { url }),
 
@@ -228,6 +244,8 @@
       available: (number) => call('cloud.available', { number }),
       setProfile: (profile) => call('cloud.setProfile', profile || {}),
       lookup: (number) => call('cloud.lookup', { number }),
+      /** { iceServers, relay } for RTCPeerConnection; includes TURN relays when configured. */
+      iceServers: () => call('cloud.iceServers'),
       send: (to, channel, payload) => call('cloud.send', { to, channel, payload }),
       inbox: (opts) => call('cloud.inbox', opts || {}),
     },

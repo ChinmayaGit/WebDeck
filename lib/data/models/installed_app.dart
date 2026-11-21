@@ -1,6 +1,18 @@
 import '../../runtime/manifest.dart';
 import 'backend_requirement.dart';
 
+/// What kind of thing an installed entry is.
+enum AppKind {
+  /// A WebDeck extension: static files + webdeck.json, using the runtime SDK.
+  extension,
+
+  /// A web project installed from GitHub, a zip or a folder.
+  webApp,
+
+  /// A saved website that opens in WebDeck's browser view.
+  shortcut,
+}
+
 class InstalledApp {
   final String id;
   final String name;
@@ -24,6 +36,14 @@ class InstalledApp {
   final String source;
 
   bool get isRuntimeApp => manifest != null;
+
+  bool get isWebShortcut => source == 'shortcut';
+
+  AppKind get kind => isWebShortcut
+      ? AppKind.shortcut
+      : isRuntimeApp
+          ? AppKind.extension
+          : AppKind.webApp;
 
   const InstalledApp({
     required this.id,

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Monitor</title>
+  <link rel="stylesheet" href="/__webdeck/ui.css">
+  <style>
+    .nm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .nm-stat { background: var(--wd-surface); border: 1px solid var(--wd-border); border-radius: 14px; padding: 12px 14px; }
+    .nm-stat .k { font-size: 12px; color: var(--wd-muted); }
+    .nm-stat .v { font-size: 22px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .nm-stat .s { font-size: 11px; color: var(--wd-muted); margin-top: 2px; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .ok { background: #10B981; } .warn { background: #F59E0B; } .bad { background: #EF4444; } .off { background: #64748B; }
+    .nm-device { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--wd-border); }
+    .nm-device:last-child { border-bottom: 0; }
+    .nm-device .ic { font-size: 22px; width: 32px; text-align: center; }
+    .nm-device .meta { flex: 1; min-width: 0; }
+    .nm-device .name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    canvas { width: 100%; height: 90px; display: block; }
+    .nm-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="wd-app" style="max-width:900px">
+    <div class="wd-header">
+      <div class="wd-icon" style="background:#0EA5E9;color:#fff">📶</div>
+      <div>
+        <h1>Network Monitor</h1>
+        <div class="wd-sub">Your connection and the WebDeck devices around you</div>
+      </div>
+      <div class="wd-spacer"></div>
+      <span class="wd-small wd-muted" id="updated"></span>
+    </div>
+
+    <div class="nm-grid">
+      <div class="nm-stat"><div class="k">Internet</div><div class="v" id="netState">…</div><div class="s" id="netSub"></div></div>
+      <div class="nm-stat"><div class="k">Latency</div><div class="v" id="latency">–</div><div class="s" id="latencySub">to Cloudflare</div></div>
+      <div class="nm-stat"><div class="k">Devices connected</div><div class="v" id="connected">–</div><div class="s" id="connectedSub">on this Wi-Fi</div></div>
+      <div class="nm-stat"><div class="k">WebDeck Cloud</div><div class="v" id="cloudState">…</div><div class="s" id="cloudSub"></div></div>
+    </div>
+
+    <div class="wd-card" style="margin-bottom:14px">
+      <div class="nm-row" style="margin-bottom:6px">
+        <b class="wd-grow">Latency (last 2 minutes)</b>
+        <span class="wd-small wd-muted" id="jitter"></span>
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div class="wd-card" style="margin-bottom:14px">
+      <div class="nm-row" style="margin-bottom:8px">
+        <b class="wd-grow">Speed test</b>
+        <button class="wd-btn wd-btn-sm wd-btn-primary" id="btnSpeed">Run test</button>
+      </div>
+      <div class="wd-progress" id="speedProgress" hidden><div style="width:0%"></div></div>
+      <div class="wd-small wd-muted" id="speedResult">Downloads up to 10 MB from Cloudflare to estimate your speed.</div>
+    </div>
+
+    <div class="wd-card" style="margin-bottom:14px">
+      <div class="nm-row" style="margin-bottom:6px">
+        <b class="wd-grow">This device</b>
+        <span class="wd-badge" id="linkBadge">Device Link</span>
+      </div>
+      <div class="wd-small" id="thisDevice">…</div>
+    </div>
+
+    <div class="wd-card">
+      <div class="nm-row" style="margin-bottom:6px">
+        <b class="wd-grow">WebDeck devices</b>
+        <button class="wd-btn wd-btn-sm" id="btnEnableLink" hidden>Turn on Device Link</button>
+      </div>
+      <div id="devices"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

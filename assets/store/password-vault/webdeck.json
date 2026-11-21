@@ -1,0 +1,13 @@
+{
+  "id": "password-vault",
+  "name": "Password Vault",
+  "version": "1.0.0",
+  "description": "Keep logins, cards, bank accounts, PINs and secure notes encrypted on this device (AES-256). Unlock with your master PIN/password or fingerprint, and link related entries together: a bank account with its app login, net-banking password, debit card and card PIN.",
+  "category": "Tools",
+  "icon": "lock",
+  "color": "#6366F1",
+  "entry": "index.html",
+  "permissions": ["files"],
+  "essential": true,
+  "author": "WebDeck"
+}

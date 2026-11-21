@@ -1,0 +1,11 @@
+{
+  "id": "game-2048",
+  "name": "2048",
+  "version": "1.0.0",
+  "description": "The sliding number puzzle: swipe or use the arrow keys to merge tiles and reach 2048. Undo, best score, and your game is saved.",
+  "category": "Games",
+  "icon": "game",
+  "color": "#EDC22E",
+  "permissions": [],
+  "author": "WebDeck"
+}

@@ -29,6 +29,7 @@ class BackupService {
 
     // 2. Add each app directory
     for (final app in apps) {
+      if (app.isWebShortcut || app.installedPath.isEmpty) continue;
       final appDir = Directory(app.installedPath);
       if (await appDir.exists()) {
         await for (final entity in appDir.list(recursive: true)) {
@@ -90,7 +91,7 @@ class BackupService {
     var restoredCount = 0;
 
     for (final backupApp in backupApps) {
-      final updatedInstalledPath = p.join(appsDir.path, backupApp.id);
+      final updatedInstalledPath = backupApp.isWebShortcut ? '' : p.join(appsDir.path, backupApp.id);
       final mergedApp = backupApp.copyWith(installedPath: updatedInstalledPath);
 
       final existingIndex = currentApps.indexWhere((a) => a.id == mergedApp.id);

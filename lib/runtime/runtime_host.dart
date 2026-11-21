@@ -60,6 +60,11 @@ class RuntimeHost {
   ConfirmPrompt confirm = (_, _) async => false;
   Future<bool> Function(Uri url) openExternalUrl = (_) async => false;
 
+  /// Device biometrics (fingerprint, Face ID, Touch ID, Windows Hello).
+  /// Replaced at startup; the defaults report "unavailable".
+  Future<bool> Function() biometricAvailable = () async => false;
+  Future<bool> Function(String reason) biometricVerify = (_) async => false;
+
   /// Overridable for tests.
   Future<List<PlatformFile>> Function({required FileType type, List<String>? allowedExtensions})
       pickFiles = ({required type, allowedExtensions}) =>
@@ -334,6 +339,33 @@ class RuntimeHost {
           url: url != null && _isWebUrl(url) ? url : null,
         );
         return true;
+      // ---- device lock (always available; secrets are scoped to this app)
+      case 'auth.status':
+        return {'biometric': await _biometricAvailableSafe()};
+      case 'auth.verify':
+        return _verifyBiometric(app, params['reason'] as String?);
+      case 'auth.setSecret':
+        final key = str('key');
+        final value = params['value'];
+        if (value != null && value is! String) {
+          throw const RuntimeError('bad_request', '"value" must be a string or null');
+        }
+        if (value != null && !await _verifyBiometric(app, params['reason'] as String?)) {
+          throw const RuntimeError('cancelled', 'Biometric check was cancelled or failed', 403);
+        }
+        await _writeSecret(app.id, key, value as String?);
+        return true;
+      case 'auth.hasSecret':
+        return (await _readSecrets(app.id)).containsKey(str('key'));
+      case 'auth.getSecret':
+        final key = str('key');
+        final secrets = await _readSecrets(app.id);
+        if (!secrets.containsKey(key)) return null;
+        if (!await _verifyBiometric(app, params['reason'] as String?)) {
+          throw const RuntimeError('cancelled', 'Biometric check was cancelled or failed', 403);
+        }
+        return secrets[key];
+
       case 'system.openUrl':
         final url = str('url');
         if (!_isWebUrl(url)) throw const RuntimeError('bad_request', 'Only http(s) URLs can be opened');
@@ -420,6 +452,59 @@ class RuntimeHost {
     throw RuntimeError('not_found', 'Unknown method "$method"', 404);
   }
 
+  // ------------------------------------------------------------ device lock
+
+  Future<bool> _biometricAvailableSafe() async {
+    try {
+      return await biometricAvailable();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _verifyBiometric(InstalledApp app, String? reason) async {
+    if (!await _biometricAvailableSafe()) {
+      throw const RuntimeError('unsupported', 'Biometric unlock is not available on this device');
+    }
+    final text = (reason == null || reason.trim().isEmpty) ? 'Unlock ${app.name}' : reason.trim();
+    try {
+      return await biometricVerify(text.length > 120 ? text.substring(0, 120) : text);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Lives in the app's data folder, so uninstalling the app removes it.
+  Future<File> _secretsFile(String appId) async =>
+      File(p.join((await data.appDir(appId)).path, 'secrets.json'));
+
+  Future<Map<String, dynamic>> _readSecrets(String appId) async {
+    final f = await _secretsFile(appId);
+    if (!await f.exists()) return {};
+    try {
+      return (jsonDecode(await f.readAsString()) as Map).cast<String, dynamic>();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _writeSecret(String appId, String key, String? value) async {
+    final secrets = await _readSecrets(appId);
+    if (value == null) {
+      secrets.remove(key);
+    } else {
+      secrets[key] = value;
+    }
+    final f = await _secretsFile(appId);
+    await f.parent.create(recursive: true);
+    await f.writeAsString(jsonEncode(secrets), flush: true);
+    if (!Platform.isWindows) {
+      try {
+        await Process.run('chmod', ['600', f.path]);
+      } catch (_) {}
+    }
+  }
+
   // ------------------------------------------------------------------ cloud
 
   Future<Object?> _cloudCall(InstalledApp app, String method, Map<String, dynamic> params) async {
@@ -443,6 +528,8 @@ class RuntimeHost {
           return await c.numberAvailable(str('number'));
         case 'cloud.setProfile':
           return await c.setProfile(name: params['name'] as String? ?? '', number: str('number'));
+        case 'cloud.iceServers':
+          return await c.iceServers();
         case 'cloud.lookup':
           return await c.lookup(str('number'));
         case 'cloud.send':

@@ -12,6 +12,8 @@ import '../../../runtime/store_service.dart';
 import '../../../runtime/tools_service.dart';
 import '../../core/theme.dart';
 import '../store/extension_builder_sheet.dart';
+import '../../../runtime/cloud_service.dart';
+import '../auth/auth_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -42,6 +44,8 @@ class SettingsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const _Header('Account'),
+                  const _AccountCard(),
                   const _Header('General'),
                   Card(
                     child: Column(
@@ -529,6 +533,56 @@ class _LinkCardState extends State<_LinkCard> {
               ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+
+class _AccountCard extends StatelessWidget {
+  const _AccountCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = context.watch<CloudService>();
+    if (cloud.hasAccount) {
+      return Card(
+        child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.person)),
+          title: Text(cloud.email ?? 'Signed in'),
+          subtitle: const Text('Signed in. WebDeck opens straight to your apps.'),
+          trailing: TextButton(
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: WebDeckTheme.surface,
+                  title: const Text('Sign out?'),
+                  content: const Text('This device will continue anonymously, and the login page will show when WebDeck opens.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sign out')),
+                  ],
+                ),
+              );
+              if (ok == true) await cloud.signOut();
+            },
+            child: const Text('Sign out'),
+          ),
+        ),
+      );
+    }
+    return Card(
+      child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+        title: const Text('Using WebDeck anonymously'),
+        subtitle: const Text('Create an account to keep your number and data, and skip the login page.'),
+        trailing: FilledButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AuthScreen(allowAnonymous: false)),
+          ),
+          child: const Text('Sign in'),
+        ),
       ),
     );
   }

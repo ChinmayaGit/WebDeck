@@ -22,8 +22,8 @@ static files plus `webdeck.json`. There is no server, build step or framework re
    - `app.js` (wrap in an IIFE; `const wd = window.webdeck;`)
    - any extra `.css`/`.js` files
 4. **Package it.** Tell the user to zip the folder (one top-level folder is fine) and install
-   it in WebDeck: **Store → Build an extension → Install from zip or folder**
-   (requires Developer mode, which the sheet offers to turn on).
+   it in WebDeck: **Home → Add → Install web app**, or **Store → Build extension →
+   Install from zip or folder**. Local use needs no approval.
 
 ## Hard rules
 

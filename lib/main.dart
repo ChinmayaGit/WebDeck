@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
@@ -19,13 +20,14 @@ import 'runtime/link_service.dart';
 import 'runtime/notification_service.dart';
 import 'runtime/runtime_host.dart';
 import 'runtime/settings_service.dart';
+import 'runtime/shortcut_service.dart';
 import 'runtime/store_service.dart';
 import 'runtime/tools_service.dart';
 import 'ui/core/theme.dart';
 import 'ui/features/catalog/view_models/catalog_view_model.dart';
 import 'ui/features/jobs/job_runner_host.dart';
 import 'ui/features/shell/app_launcher.dart';
-import 'ui/features/shell/shell_screen.dart';
+import 'ui/features/auth/auth_screen.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -91,9 +93,14 @@ void main() async {
   runtime.jobs = scheduler;
   runtime.confirm = _confirmPrompt;
   runtime.openExternalUrl = (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
+  final localAuth = LocalAuthentication();
+  runtime.biometricAvailable = () async =>
+      await localAuth.isDeviceSupported() && (await localAuth.getAvailableBiometrics()).isNotEmpty;
+  runtime.biometricVerify = (reason) =>
+      localAuth.authenticate(localizedReason: reason, biometricOnly: true, persistAcrossBackgrounding: true);
 
-  final store = StoreService(repository: repository, settings: settings);
-  final catalog = CatalogViewModel(repository);
+  final store = StoreService(repository: repository, settings: settings)..cloud = cloud;
+  final catalog = CatalogViewModel(repository, settings: settings);
   unawaited(
     store.refresh().then((_) => store.updateBundledApps()).then((n) {
       if (n > 0) catalog.loadApps();
@@ -101,6 +108,7 @@ void main() async {
   );
   scheduler.start();
 
+  unawaited(ShortcutService.listen(navigatorKey, catalog));
   runApp(
     MultiProvider(
       providers: [
@@ -150,7 +158,7 @@ class WebDeckApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: WebDeckTheme.darkTheme,
-      home: const ShellScreen(),
+      home: const AuthGate(),
       builder: (context, child) => Stack(
         textDirection: TextDirection.ltr,
         children: [
